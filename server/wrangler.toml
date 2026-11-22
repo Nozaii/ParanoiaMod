@@ -1,0 +1,14 @@
+name = "paranoia-nametags"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Créé avec : npx wrangler kv namespace create PROFILES
+[[kv_namespaces]]
+binding = "PROFILES"
+id = "5694821c6d1d4ecabd6f3de962a956b1"
+
+# Base SQL du système social (amis, demandes, présence, messages). Schéma : schema.sql
+[[d1_databases]]
+binding = "DB"
+database_name = "paranoia-social"
+database_id = "943b5683-9396-4b8d-b34d-43e16f622314"

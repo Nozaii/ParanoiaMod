@@ -1,0 +1,14 @@
+{
+  "combat.hit": {
+    "subtitle": "Hit",
+    "sounds": ["aurora:damage/hit1", "aurora:damage/hit2", "aurora:damage/hit3", "aurora:damage/hit4"]
+  },
+  "fall.small": {
+    "subtitle": "Fall",
+    "sounds": ["aurora:damage/fallsmall"]
+  },
+  "fall.big": {
+    "subtitle": "Big fall",
+    "sounds": ["aurora:damage/fallbig"]
+  }
+}

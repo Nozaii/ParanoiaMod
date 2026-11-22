@@ -1,0 +1,46 @@
+plugins {
+	id 'fabric-loom' version "${loom_version}"
+}
+
+base {
+	archivesName = "aurora"
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings loom.officialMojangMappings()
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+	// WebP pictures from Modrinth (icons, galleries): TwelveMonkeys ImageIO (BSD-3, pure Java), shipped inside the jar
+	for (lib in ['com.twelvemonkeys.imageio:imageio-webp', 'com.twelvemonkeys.imageio:imageio-core', 'com.twelvemonkeys.imageio:imageio-metadata',
+			'com.twelvemonkeys.common:common-lang', 'com.twelvemonkeys.common:common-io', 'com.twelvemonkeys.common:common-image']) {
+		include(implementation("${lib}:3.12.0"))
+	}
+}
+
+processResources {
+	def version = project.version
+	inputs.property "version", version
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+	it.options.encoding = "UTF-8"
+}
+
+java {
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+// dev only: -PhotAgent=<paranoia-agent.jar> runs the client with the Paranoia Dynamic Runtime's agent (hot mods tests)
+loom {
+	runs {
+		client {
+			if (project.hasProperty('hotAgent')) vmArg "-javaagent:${project.property('hotAgent')}"
+		}
+	}
+}

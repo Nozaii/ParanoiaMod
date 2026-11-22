@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "aurora",
+  "version": "${version}",
+  "name": "Paranoia Menu",
+  "description": "Mod menu Paranoia : catégories, modules on/off, éditeur de HUD. Ouvrir avec Shift droit.",
+  "authors": ["lelooser"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["gg.aurora.AuroraClient"],
+    "preLaunch": ["gg.aurora.Guard"]
+  },
+  "mixins": ["aurora.mixins.json"],
+  "jars": [
+    {"file": "META-INF/jars/lithium.jar"},
+    {"file": "META-INF/jars/krypton.jar"},
+    {"file": "META-INF/jars/ixeris.jar"},
+    {"file": "META-INF/jars/immediatelyfast.jar"},
+    {"file": "META-INF/jars/fadeless.jar"},
+    {"file": "META-INF/jars/locator-heads.jar"}
+  ],
+  "depends": {
+    "fabricloader": ">=0.17.0",
+    "minecraft": ">=1.21.11 <1.22",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "breaks": {
+    "velaris": "*"
+  }
+}

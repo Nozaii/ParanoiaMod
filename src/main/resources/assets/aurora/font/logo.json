@@ -1,0 +1,5 @@
+{
+  "providers": [
+    {"type": "bitmap", "file": "aurora:font/logo.png", "height": 8, "ascent": 7, "chars": [""]}
+  ]
+}

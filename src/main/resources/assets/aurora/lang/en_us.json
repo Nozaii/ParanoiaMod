@@ -1,0 +1,14 @@
+{
+  "key.category.aurora.main": "Paranoia",
+  "key.aurora.menu": "Open Paranoia menu",
+  "key.aurora.zoom": "Zoom",
+  "key.aurora.waypoints": "Waypoints menu",
+  "key.aurora.waypoint_add": "New waypoint",
+  "key.aurora.waypoint_toggle": "Show / hide waypoints",
+  "key.aurora.waypoint_zone": "Zone waypoint (aim at 2 corners)",
+  "key.aurora.music_toggle": "Music: play / pause",
+  "key.aurora.music_next": "Music: next track",
+  "key.aurora.music_prev": "Music: previous track",
+  "key.aurora.emotes": "Emote wheel",
+  "key.aurora.freelook": "Freelook"
+}
