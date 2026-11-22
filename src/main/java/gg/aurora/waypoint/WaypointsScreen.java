@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Waypoints menu, Minecraft look (square boxes, raised buttons, item slots).
+ * Waypoints menu.
  * Left: search, dimension filter, folders and waypoints (drag a waypoint onto a folder to move it).
  * Right: editor with tabs (General, Look, Highlight, Share), live preview and a fixed action bar.
  */
@@ -272,19 +272,8 @@ public class WaypointsScreen extends Screen {
 
     // ===================================================================== rendering
 
-    private static final int WINDOW = 0xF0181622, WELL = 0xC00A0912, BTN = 0xFF2C2840, BTN_HOVER = 0xFF3D3858;
-
     @Override
     public void render(GuiGraphics g, int mx, int my, float pt) {
-        Draw.squareOn();
-        try {
-            render0(g, mx, my);
-        } finally {
-            Draw.squareOff();
-        }
-    }
-
-    private void render0(GuiGraphics g, int mx, int my) {
         long now = System.nanoTime();
         float raw = Math.min(0.05f, (now - last) / 1e9f);
         last = now;
@@ -298,31 +287,29 @@ public class WaypointsScreen extends Screen {
 
         ww = Math.min(width - 24, 580);
         wh = Math.min(height - 20, 340);
-        wx = Math.round((width - ww) / 2);
-        wy = Math.round((height - wh) / 2 + (1 - open.value) * 18);
-        // window: dark, square, 2 px raised frame like vanilla containers
-        Draw.rect(g, wx - 1, wy - 1, ww + 2, wh + 2, Draw.withAlpha(0x000000, 0.8f * a));
-        Draw.bevel(g, wx, wy, ww, wh, WINDOW, a);
-        Draw.rect(g, wx + 1, wy + 1, ww - 2, 1, Draw.withAlpha(0xFFFFFF, 0.08f * a));
+        wx = (width - ww) / 2;
+        wy = (height - wh) / 2 + (1 - open.value) * 18;
+        Draw.glow(g, wx, wy + 6, ww, wh, 20, Draw.withAlpha(0x000000, 0.6f * a));
+        Draw.glass(g, wx, wy, ww, wh, 10, Draw.withAlpha(Theme.PANEL, 0.95f * a), Draw.withAlpha(0xFFFFFF, 0.3f * a));
 
         // ---- header
-        Draw.icon(g, Icons.PIN, wx + 14, wy + 13, 10, Draw.withAlpha(Theme.accent(), a));
-        Draw.mcText(g, "Waypoints", wx + 23, wy + 9, Draw.withAlpha(0xFFFFFF, a));
+        Draw.icon(g, Icons.PIN, wx + 16, wy + 14, 11, Draw.withAlpha(Theme.accent(), a));
+        Draw.text(g, "Waypoints", wx + 26, wy + 8.5f, 1.15f, Draw.withAlpha(Theme.TEXT, a));
         String sub = Waypoints.LIST.size() + " here  ·  " + key(Waypoints.openKey) + ": open  ·  " + key(Waypoints.addKey) + ": add at the aimed block";
-        Draw.text(g, sub, wx + 29 + Draw.mcWidth("Waypoints"), wy + 10, 0.72f, Draw.withAlpha(Theme.TEXT_MUTED, a));
-        float cx = wx + ww - 20, cy = wy + 5;
-        boolean chv = inside(mx, my, cx, cy, 15, 15);
+        Draw.text(g, sub, wx + 34 + Draw.width("Waypoints", 1.15f), wy + 11, 0.75f, Draw.withAlpha(Theme.TEXT_MUTED, a));
+        float cx = wx + ww - 22, cy = wy + 6;
+        boolean chv = inside(mx, my, cx, cy, 16, 16);
         pointer |= chv;
-        Draw.bevel(g, cx, cy, 15, 15, chv ? 0xFFB03030 : BTN, a);
-        Draw.mcText(g, "×", cx + 5, cy + 3.5f, Draw.withAlpha(0xFFFFFF, a));
+        Draw.rrect(g, cx, cy, 16, 16, 8, Draw.withAlpha(chv ? 0xE8473E : Theme.ROW, 0.9f * a));
+        Draw.centered(g, "×", cx + 8, cy + 3.5f, 1f, Draw.withAlpha(Theme.TEXT, a));
 
         renderList(g, mx, my, a, now);
         renderEditor(g, mx, my, a);
         if (dragging && drag != null) {
             String n = drag.name;
-            float tw = Draw.mcWidth(n) + 8;
-            Draw.bevel(g, mx + 6, my + 2, tw, 14, 0xF0302A48, 1);
-            Draw.mcText(g, n, mx + 10, my + 5, 0xFFFFFFFF);
+            float tw = Draw.width(n, 0.85f) + 12;
+            Draw.rrect(g, mx + 6, my + 2, tw, 14, 7, Draw.withAlpha(Theme.accent(), 0.95f));
+            Draw.text(g, n, mx + 12, my + 5.5f, 0.85f, 0xFFFFFFFF);
         }
 
         if (pointer) g.requestCursor(CursorTypes.POINTING_HAND);
@@ -333,32 +320,31 @@ public class WaypointsScreen extends Screen {
     }
 
     private void renderList(GuiGraphics g, int mx, int my, float a, long now) {
-        lx = wx + 8;
-        ly = wy + 26;
-        lw = Math.round(Math.max(165, ww * 0.38f));
-        lh = wh - 34;
+        lx = wx + 10;
+        ly = wy + 30;
+        lw = Math.max(165, ww * 0.38f);
+        lh = wh - 40;
+        Draw.rrect(g, lx, ly, lw, lh, 8, Draw.withAlpha(0x000000, 0.22f * a));
         // search field (sunken)
-        float sw = lw;
-        Draw.inset(g, lx, ly, sw, 16, searchFocus ? 0xFF000000 : 0xE0000000, a);
-        if (searchFocus) Draw.ring(g, lx, ly, sw, 16, 0, Draw.withAlpha(0xFFFFFF, 0.6f * a));
-        pointer |= inside(mx, my, lx, ly, sw, 16);
-        Draw.icon(g, Icons.SEARCH, lx + 8, ly + 8, 7, Draw.withAlpha(Theme.TEXT_DIM, a));
+        float sw = lw - 10;
+        Draw.rrect(g, lx + 5, ly + 5, sw, 16, 6, Draw.withAlpha(searchFocus ? Theme.ROW_HOVER : Theme.ROW, 0.95f * a));
+        if (searchFocus) Draw.ring(g, lx + 5, ly + 5, sw, 16, 6, Draw.withAlpha(Theme.accent(), 0.7f * a));
+        pointer |= inside(mx, my, lx + 5, ly + 5, sw, 16);
+        Draw.icon(g, Icons.SEARCH, lx + 13, ly + 13, 7, Draw.withAlpha(Theme.TEXT_DIM, a));
         boolean blink = searchFocus && (now / 500_000_000L) % 2 == 0;
-        Draw.text(g, search.isEmpty() && !searchFocus ? "Search a waypoint…" : search + (blink ? "_" : ""), lx + 15, ly + 4.5f, 0.85f,
+        Draw.text(g, search.isEmpty() && !searchFocus ? "Search a waypoint…" : search + (blink ? "|" : ""), lx + 20, ly + 9.5f, 0.85f,
                 Draw.withAlpha(search.isEmpty() && !searchFocus ? Theme.TEXT_MUTED : Theme.TEXT, a));
         // dimension filter: square toggle buttons
-        float px = lx, py = ly + 19, pw = (lw - 3 * 2) / 4;
+        float px = lx + 5, py = ly + 25, pw = (lw - 10 - 3 * 3) / 4;
         for (int i = 0; i < DIMS.length; i++) {
-            float bx = px + i * (pw + 2);
+            float bx = px + i * (pw + 3);
             boolean sel = i == dimFilter, hv = inside(mx, my, bx, py, pw, 13);
             pointer |= hv && !sel;
-            if (sel) Draw.inset(g, bx, py, pw, 13, Draw.withAlpha(Theme.accent(), 0.85f), a);
-            else Draw.bevel(g, bx, py, pw, 13, hv ? BTN_HOVER : BTN, a);
+            Draw.rrect(g, bx, py, pw, 13, 6.5f, Draw.withAlpha(sel ? Theme.accent() : hv ? Theme.ROW_HOVER : Theme.ROW, (sel ? 0.9f : 0.8f) * a));
             Draw.centered(g, DIMS[i], bx + pw / 2, py + 3, 0.75f, Draw.withAlpha(sel ? 0xFFFFFF : Theme.TEXT_DIM, a));
         }
 
-        float listY = ly + 35, listH = lh - 35 - 22;
-        Draw.inset(g, lx, listY - 1, lw, listH + 2, WELL, a);
+        float listY = ly + 43, listH = lh - 43 - 26;
         rebuild(0);
         float content = lines.isEmpty() ? 0 : lines.get(lines.size() - 1).y() + lines.get(lines.size() - 1).h();
         float maxScroll = Math.max(0, content - listH);
@@ -369,12 +355,12 @@ public class WaypointsScreen extends Screen {
         for (Line l : lines) {
             float ry = listY + l.y() - scroll;
             if (ry + l.h() < listY || ry > listY + listH) continue;
-            drawLine(g, l, lx + 2, ry, lw - 6, mx, my, a, inList);
+            drawLine(g, l, lx + 4, ry, lw - 8, mx, my, a, inList);
         }
         g.disableScissor();
         if (maxScroll > 0) {
             float barH = Math.max(14, listH * listH / content);
-            Draw.rect(g, lx + lw - 3, listY + (listH - barH) * (scroll / maxScroll), 2, barH, Draw.withAlpha(0xFFFFFF, 0.35f * a));
+            Draw.rrect(g, lx + lw - 3, listY + (listH - barH) * (scroll / maxScroll), 2, barH, 1, Draw.withAlpha(Theme.accent(), 0.6f * a));
         }
         if (lines.isEmpty()) {
             float cy = listY + listH / 2 - 16;
@@ -385,14 +371,14 @@ public class WaypointsScreen extends Screen {
                     lx + lw / 2, cy + 26, 0.72f, Draw.withAlpha(Theme.TEXT_MUTED, a));
         }
         // bottom buttons
-        float by = ly + lh - 18, bw = (lw - 4) / 3;
-        action(g, "+ Waypoint", lx, by, bw, 18, true, false, mx, my, a, this::newWaypoint);
-        action(g, "+ Zone", lx + 2 + bw, by, bw, 18, false, false, mx, my, a, () -> {
+        float by = ly + lh - 21, bw = (lw - 16) / 3;
+        action(g, "+ Waypoint", lx + 5, by, bw, 16, true, false, mx, my, a, this::newWaypoint);
+        action(g, "+ Zone", lx + 8 + bw, by, bw, 16, false, false, mx, my, a, () -> {
             Waypoints.save();
             minecraft.setScreen(null);
             Waypoints.startZone();
         });
-        action(g, "+ Folder", lx + 4 + bw * 2, by, bw, 18, false, false, mx, my, a, () -> {
+        action(g, "+ Folder", lx + 11 + bw * 2, by, bw, 16, false, false, mx, my, a, () -> {
             Waypoint.Folder f = addFolder();
             select(f);
             focusName();
@@ -414,13 +400,11 @@ public class WaypointsScreen extends Screen {
         pointer |= hv && !dragging;
         boolean drop = dragging && hv && dropFolder(l) != null;
         if (drop) {
-            Draw.rect(g, x, y, w, h, Draw.withAlpha(Theme.accent(), 0.35f * a));
-            Draw.ring(g, x, y, w, h, 0, Draw.withAlpha(0xFFFFFF, 0.8f * a));
-        } else if (sel) {
-            Draw.bevel(g, x, y + 1, w, h - 2, Draw.withAlpha(Theme.tileHover(), 0.95f), a);
-            Draw.rect(g, x, y + 1, 2, h - 2, Draw.withAlpha(Theme.accent(), a));
-        } else if (hv) {
-            Draw.rect(g, x, y + 1, w, h - 2, Draw.withAlpha(0xFFFFFF, 0.06f * a));
+            Draw.rrect(g, x, y + 1, w, h - 2, 5, Draw.withAlpha(Theme.accent(), 0.35f * a));
+            Draw.ring(g, x, y + 1, w, h - 2, 5, Draw.withAlpha(Theme.accent(), a));
+        } else if (sel || hv) {
+            Draw.rrect(g, x, y + 1, w, h - 2, 5, Draw.withAlpha(sel ? Theme.tileHover() : Theme.ROW_HOVER, (sel ? 0.95f : 0.55f) * a));
+            if (sel) Draw.ring(g, x, y + 1, w, h - 2, 5, Draw.withAlpha(Theme.accent(), 0.6f * a));
         }
         float ix = x + 4 + l.depth() * 10;
         float eyeX = x + w - 10;
@@ -432,37 +416,40 @@ public class WaypointsScreen extends Screen {
             Draw.icon(g, Icons.CARET_DOWN, 0, 0, 7, Draw.withAlpha(Theme.TEXT_DIM, a));
             g.pose().popMatrix();
             Draw.icon(g, Icons.FOLDER, ix + 14, y + h / 2, 9, Draw.withAlpha(f.color, a));
-            Draw.mcText(g, f.name, ix + 21, y + 5, Draw.withAlpha(f.visible ? 0xFFFFFF : 0x80808080, a));
-            Draw.text(g, "(" + count(f) + ")", ix + 24 + Draw.mcWidth(f.name), y + 6, 0.72f, Draw.withAlpha(Theme.TEXT_DIM, a));
+            Draw.text(g, f.name, ix + 22, y + 5, 0.88f, Draw.withAlpha(f.visible ? Theme.TEXT : Theme.TEXT_MUTED, a));
+            String n = String.valueOf(count(f));
+            float nx = ix + 24 + Draw.width(f.name, 0.88f);
+            Draw.rrect(g, nx, y + 4, Draw.width(n, 0.7f) + 7, 10, 5, Draw.withAlpha(0x000000, 0.3f * a));
+            Draw.text(g, n, nx + 3.5f, y + 6, 0.7f, Draw.withAlpha(Theme.TEXT_DIM, a));
             if (f.locked) Draw.icon(g, Icons.LOCK, eyeX - 14, y + h / 2, 7, Draw.withAlpha(Theme.accent(), a));
             eye(g, eyeX, y + h / 2, f.visible, mx, my, a);
         } else if (l.item() == NO_FOLDER) {
             Draw.icon(g, Icons.LIST, ix + 3, y + h / 2, 7, Draw.withAlpha(Theme.TEXT_MUTED, a));
             Draw.text(g, "No folder", ix + 12, y + 5.5f, 0.8f, Draw.withAlpha(Theme.TEXT_DIM, a));
         } else if (l.item() instanceof Waypoint wp) {
-            if (l.depth() > 0) Draw.rect(g, x + 7, y, 1, h, Draw.withAlpha(0xFFFFFF, 0.08f * a));
-            // icon in an inventory slot
-            float sx = ix, sy = y + 2;
-            Draw.slot(g, sx, sy, 18, a);
+            Draw.rrect(g, ix, y + 4, 2, h - 8, 1, Draw.withAlpha(wp.color, a));
             ItemStack s = wp.iconType == 1 ? Waypoints.iconStack(wp) : ItemStack.EMPTY;
+            float tx = ix + 6;
             if (!s.isEmpty()) {
-                g.renderItem(s, Math.round(sx + 1), Math.round(sy + 1));
+                g.pose().pushMatrix();
+                g.pose().translate(ix + 5, y + 4);
+                g.pose().scale(0.875f, 0.875f);
+                g.renderItem(s, 0, 0);
+                g.pose().popMatrix();
+                tx += 17;
             } else if (wp.iconType == 2) {
-                Draw.rect(g, sx + 2, sy + 2, 14, 14, Draw.withAlpha(wp.color, a));
-                Draw.mcText(g, wp.name.isEmpty() ? "?" : wp.name.substring(0, 1).toUpperCase(), sx + 6, sy + 5, Draw.withAlpha(0xFFFFFF, a));
-            } else {
-                Draw.rect(g, sx + 6, sy + 6, 6, 6, Draw.withAlpha(wp.color, a));
+                Draw.rrect(g, ix + 5, y + 4, 14, 14, 3, Draw.withAlpha(wp.color, 0.85f * a));
+                Draw.centered(g, wp.name.isEmpty() ? "?" : wp.name.substring(0, 1).toUpperCase(), ix + 12, y + 7.5f, 0.85f, Draw.withAlpha(0xFFFFFF, a));
+                tx += 17;
             }
-            Draw.rect(g, sx + 18, sy + 2, 2, 14, Draw.withAlpha(wp.color, a));
-            float tx = sx + 24;
             double d = distance(wp);
             String dist = d < 0 ? "" : d < 1000 ? Math.round(d) + " m" : String.format(Locale.ROOT, "%.1f km", d / 1000);
             float distW = dist.isEmpty() ? 0 : Draw.width(dist, 0.75f) + 6;
             String name = wp.name;
             float maxW = eyeX - 10 - distW - tx;
-            while (name.length() > 1 && Draw.mcWidth(name) > maxW) name = name.substring(0, name.length() - 2) + "…";
-            Draw.mcText(g, name, tx, y + 2.5f, Draw.withAlpha(wp.visible ? 0xFFFFFF : 0x80808080, a));
-            Draw.text(g, wp.area ? "Zone " + wp.sizeText() : wp.x + " " + wp.y + " " + wp.z, tx, y + 13, 0.66f, Draw.withAlpha(Theme.TEXT_MUTED, a));
+            while (name.length() > 1 && Draw.width(name, 0.88f) > maxW) name = name.substring(0, name.length() - 2) + "…";
+            Draw.text(g, name, tx, y + 3.5f, 0.88f, Draw.withAlpha(wp.visible ? Theme.TEXT : Theme.TEXT_MUTED, a));
+            Draw.text(g, wp.area ? "Zone " + wp.sizeText() : wp.x + " " + wp.y + " " + wp.z, tx, y + 12.5f, 0.68f, Draw.withAlpha(Theme.TEXT_MUTED, a));
             if (!dist.isEmpty()) Draw.text(g, dist, eyeX - 9 - distW + 6, y + 8, 0.75f, Draw.withAlpha(Theme.TEXT_DIM, a));
             if (wp.temp) Draw.icon(g, Icons.SKULL, eyeX - 12 - distW, y + h / 2, 7, Draw.withAlpha(0xE8473E, a));
             eye(g, eyeX, y + h / 2, wp.visible, mx, my, a);
@@ -471,22 +458,21 @@ public class WaypointsScreen extends Screen {
 
     private void eye(GuiGraphics g, float cx, float cy, boolean on, int mx, int my, float a) {
         boolean hv = inside(mx, my, cx - 7, cy - 7, 14, 14);
-        if (hv) Draw.rect(g, cx - 7, cy - 7, 14, 14, Draw.withAlpha(0xFFFFFF, 0.1f * a));
+        if (hv) Draw.rrect(g, cx - 7, cy - 7, 14, 14, 7, Draw.withAlpha(0xFFFFFF, 0.1f * a));
         Draw.icon(g, Icons.EYE, cx, cy, 8, Draw.withAlpha(on ? (hv ? Theme.TEXT : Theme.TEXT_DIM) : 0x50545C, a));
-        if (!on) Draw.rect(g, cx - 5, cy - 0.5f, 10, 1, Draw.withAlpha(0x8A8E96, a));
+        if (!on) Draw.rrect(g, cx - 5, cy - 0.5f, 10, 1, 0.5f, Draw.withAlpha(0x8A8E96, a));
     }
 
     private void renderEditor(GuiGraphics g, int mx, int my, float a) {
-        ex = lx + lw + 6;
+        ex = lx + lw + 8;
         ey = ly;
-        ew = wx + ww - 8 - ex;
+        ew = wx + ww - 10 - ex;
         eh = lh;
-        Draw.inset(g, ex, ey, ew, eh, WELL, a);
+        Draw.rrect(g, ex, ey, ew, eh, 8, Draw.withAlpha(0x000000, 0.22f * a));
         if (selected == null) {
             float cy = ey + eh / 2 - 30;
             Draw.icon(g, Icons.PIN, ex + ew / 2, cy, 22, Draw.withAlpha(Theme.accent(), 0.8f * a));
-            String t = "Select a waypoint";
-            Draw.mcText(g, t, ex + ew / 2 - Draw.mcWidth(t) / 2f, cy + 16, Draw.withAlpha(0xFFFFFF, a));
+            Draw.centered(g, "Select a waypoint", ex + ew / 2, cy + 18, 1f, Draw.withAlpha(Theme.TEXT, a));
             Draw.centered(g, "or create a new one", ex + ew / 2, cy + 30, 0.8f, Draw.withAlpha(Theme.TEXT_DIM, a));
             float bw = 130;
             action(g, "+ New waypoint here", ex + ew / 2 - bw / 2, cy + 46, bw, 18, true, false, mx, my, a, this::newWaypoint);
@@ -496,44 +482,39 @@ public class WaypointsScreen extends Screen {
         float top = ey + 4;
         if (selected instanceof Waypoint w) {
             boolean isNew = w == creating;
-            Draw.mcText(g, isNew ? (w.area ? "New zone" : "New waypoint") : w.name.isBlank() ? "Waypoint" : w.name, ex + 8, ey + 7,
-                    Draw.withAlpha(0xFFFFFF, a));
+            Draw.text(g, isNew ? (w.area ? "New zone" : "New waypoint") : w.name.isBlank() ? "Waypoint" : w.name, ex + 9, ey + 8, 1f,
+                    Draw.withAlpha(Theme.TEXT, a));
             Waypoint.Folder in = Waypoints.folder(w.folder);
             String where = dimName(w.dim) + (w.area ? "  ·  " + w.sizeText() : "") + (in != null ? "  ·  " + in.name : "");
-            Draw.text(g, where, ex + 8, ey + 19, 0.72f, Draw.withAlpha(Theme.TEXT_MUTED, a));
-            // preview: a sky-and-grass strip, like the world
-            float pvw = Math.min(150, ew * 0.48f), pvh = 38, pvx = ex + ew - pvw - 5, pvy = ey + 4;
-            Draw.inset(g, pvx, pvy, pvw, pvh, 0xFF6F95C9, a);
-            Draw.rect(g, pvx + 1, pvy + pvh - 9, pvw - 2, 8, Draw.withAlpha(0x5B8A3A, a));
-            Draw.rect(g, pvx + 1, pvy + pvh - 9, pvw - 2, 2, Draw.withAlpha(0x79B34D, a));
+            Draw.text(g, where, ex + 9, ey + 20, 0.75f, Draw.withAlpha(Theme.TEXT_MUTED, a));
+            float pvw = Math.min(150, ew * 0.5f), pvh = 40, pvx = ex + ew - pvw - 6, pvy = ey + 5;
+            Draw.rrect(g, pvx, pvy, pvw, pvh, 6, Draw.withAlpha(0x2A2F38, a));
+            for (int i = 0; i * 8 < pvw - 6; i++) for (int j = 0; j * 8 < pvh - 6; j++) if ((i + j) % 2 == 0)
+                g.fill((int) (pvx + 3 + i * 8), (int) (pvy + 3 + j * 8), (int) Math.min(pvx + pvw - 3, pvx + 3 + i * 8 + 8),
+                        (int) Math.min(pvy + pvh - 3, pvy + 3 + j * 8 + 8), Draw.withAlpha(0x343A45, a));
             double d = distance(w);
-            Waypoints.drawLabel(g, font, w, pvx + pvw / 2, pvy + pvh - 12, d < 0 ? 50 : d, 1f);
-            // tabs (Minecraft creative-inventory style)
-            tabY = ey + 46;
-            float tw = (ew - 8 - 3 * 2) / 4f;
+            Waypoints.drawLabel(g, font, w, pvx + pvw / 2, pvy + pvh / 2 + 6, d < 0 ? 50 : d, 1f);
+            // tabs: segmented pill like the rest of the menu
+            tabY = ey + 50;
+            float tw = (ew - 12) / 4f;
+            Draw.rrect(g, ex + 6, tabY, ew - 12, 16, 8, Draw.withAlpha(Theme.ROW, 0.9f * a));
             for (int i = 0; i < TABS.length; i++) {
-                float tx = ex + 4 + i * (tw + 2);
+                float tx = ex + 6 + i * tw;
                 boolean sel = i == tab, hv = inside(mx, my, tx, tabY, tw, 16);
                 pointer |= hv && !sel;
-                if (sel) {
-                    Draw.bevel(g, tx, tabY, tw, 17, 0xFF2A2640, a);
-                    Draw.rect(g, tx + 1, tabY, tw - 2, 1, Draw.withAlpha(Theme.accent(), a));
-                } else {
-                    Draw.bevel(g, tx, tabY + 2, tw, 14, hv ? BTN_HOVER : 0xFF1A1828, a);
-                }
-                String t = TABS[i];
-                Draw.mcText(g, t, tx + tw / 2 - Draw.mcWidth(t) / 2f, tabY + (sel ? 5 : 5.5f), Draw.withAlpha(sel ? 0xFFFFFF : 0xFFA8A4BC, a));
+                if (sel) Draw.rrect(g, tx + 1.5f, tabY + 1.5f, tw - 3, 13, 6.5f, Draw.withAlpha(Theme.accent(), 0.95f * a));
+                else if (hv) Draw.rrect(g, tx + 1.5f, tabY + 1.5f, tw - 3, 13, 6.5f, Draw.withAlpha(Theme.ROW_HOVER, a));
+                Draw.centered(g, TABS[i], tx + tw / 2, tabY + 4.5f, 0.82f, Draw.withAlpha(sel ? 0xFFFFFF : Theme.TEXT_DIM, a));
             }
-            Draw.rect(g, ex + 4, tabY + 16, ew - 8, 1, Draw.withAlpha(0x000000, 0.6f * a));
             top = tabY + 18;
             // action bar
-            float by = ey + eh - barH + 5, half = (ew - 12) / 2;
+            float by = ey + eh - barH + 4, half = (ew - 15) / 2;
             if (isNew) {
-                action(g, "Cancel", ex + 4, by, half, 18, false, false, mx, my, a, () -> {
+                action(g, "Cancel", ex + 5, by, half, 18, false, false, mx, my, a, () -> {
                     creating = null;
                     select(null);
                 });
-                action(g, "Create waypoint", ex + 8 + half, by, half, 18, true, false, mx, my, a, () -> {
+                action(g, "Create waypoint", ex + 10 + half, by, half, 18, true, false, mx, my, a, () -> {
                     if (w.name.isBlank()) w.name = "Waypoint";
                     Waypoints.LIST.add(w);
                     creating = null;
@@ -543,14 +524,14 @@ public class WaypointsScreen extends Screen {
             } else {
                 boolean confirm = System.currentTimeMillis() < confirmDeleteUntil;
                 boolean locked = in != null && in.locked;
-                action(g, "Duplicate", ex + 4, by, half, 18, false, false, mx, my, a, () -> {
+                action(g, "Duplicate", ex + 5, by, half, 18, false, false, mx, my, a, () -> {
                     Waypoint c = w.copy();
                     c.name = w.name + " (copy)";
                     Waypoints.LIST.add(c);
                     Waypoints.save();
                     select(c);
                 });
-                action(g, locked ? "Locked" : confirm ? "Sure? Click again" : "Delete", ex + 8 + half, by, half, 18, false, !locked, mx, my, a, () -> {
+                action(g, locked ? "Locked" : confirm ? "Sure? Click again" : "Delete", ex + 10 + half, by, half, 18, false, !locked, mx, my, a, () -> {
                     if (locked) return;
                     if (!confirm) {
                         confirmDeleteUntil = System.currentTimeMillis() + 2500;
@@ -562,14 +543,13 @@ public class WaypointsScreen extends Screen {
                 });
             }
         } else if (selected instanceof Waypoint.Folder f) {
-            Draw.icon(g, Icons.FOLDER, ex + 13, ey + 11, 10, Draw.withAlpha(f.color, a));
-            Draw.mcText(g, f.name.isBlank() ? "Folder" : f.name, ex + 22, ey + 7, Draw.withAlpha(0xFFFFFF, a));
-            Draw.text(g, count(f) + " waypoint(s)", ex + 8, ey + 20, 0.72f, Draw.withAlpha(Theme.TEXT_MUTED, a));
-            Draw.rect(g, ex + 4, ey + 31, ew - 8, 1, Draw.withAlpha(0x000000, 0.6f * a));
-            top = ey + 33;
-            float by = ey + eh - barH + 5;
+            Draw.icon(g, Icons.FOLDER, ex + 14, ey + 12, 10, Draw.withAlpha(f.color, a));
+            Draw.text(g, f.name.isBlank() ? "Folder" : f.name, ex + 23, ey + 8, 1f, Draw.withAlpha(Theme.TEXT, a));
+            Draw.text(g, count(f) + " waypoint(s)", ex + 9, ey + 20, 0.75f, Draw.withAlpha(Theme.TEXT_MUTED, a));
+            top = ey + 32;
+            float by = ey + eh - barH + 4;
             boolean confirm = System.currentTimeMillis() < confirmDeleteUntil;
-            action(g, f.locked ? "Locked" : confirm ? "Sure? Its waypoints stay, without folder" : "Delete folder", ex + 4, by, ew - 8, 18, false, !f.locked,
+            action(g, f.locked ? "Locked" : confirm ? "Sure? Its waypoints stay, without folder" : "Delete folder", ex + 5, by, ew - 10, 18, false, !f.locked,
                     mx, my, a, () -> {
                         if (f.locked) return;
                         if (!confirm) {
@@ -582,8 +562,8 @@ public class WaypointsScreen extends Screen {
                         select(null);
                     });
         }
-        Draw.rect(g, ex + 4, ey + eh - barH, ew - 8, 1, Draw.withAlpha(0x000000, 0.6f * a));
-        panel.render(g, ex + 1, top, ew - 2, ey + eh - barH - 1 - top, mx, my, a);
+        Draw.rrect(g, ex + 6, ey + eh - barH, ew - 12, 0.7f, 0.35f, Draw.withAlpha(0xFFFFFF, 0.08f * a));
+        panel.render(g, ex, top, ew, ey + eh - barH - 2 - top, mx, my, a);
     }
 
     private static String dimName(String dim) {
@@ -595,17 +575,16 @@ public class WaypointsScreen extends Screen {
         };
     }
 
-    /** Raised Minecraft-style button (primary = accent, danger = red). Remembered for the click. */
+    /** Action button (primary = accent, danger = red). Remembered for the click. */
     private void action(GuiGraphics g, String label, float x, float y, float w, float h, boolean primary, boolean danger,
                         int mx, int my, float a, Runnable run) {
         boolean hv = inside(mx, my, x, y, w, h);
         pointer |= hv;
-        int fill = primary ? 0xFF000000 | Draw.lerpColor(Theme.accent(), 0xFFFFFF, hv ? 0.15f : 0) : danger ? (hv ? 0xFF8A2A2A : 0xFF4E2328) : hv ? BTN_HOVER : BTN;
-        Draw.bevel(g, x, y, w, h, fill, a);
-        if (hv) Draw.ring(g, x, y, w, h, 0, Draw.withAlpha(0xFFFFFF, 0.55f * a));
-        String shown = label;
-        while (shown.length() > 3 && Draw.mcWidth(shown) > w - 6) shown = shown.substring(0, shown.length() - 2) + "…";
-        Draw.mcText(g, shown, x + w / 2 - Draw.mcWidth(shown) / 2f, y + h / 2 - 3.5f, Draw.withAlpha(danger ? 0xFFFFD0D0 : 0xFFFFFFFF, a));
+        int fill = primary ? Draw.lerpColor(Theme.accent(), 0xFFFFFF, hv ? 0.12f : 0) : danger ? (hv ? 0x8A2A2A : 0x4A2226) : hv ? Theme.tileHover() : Theme.ROW;
+        int border = primary ? 0xFFFFFF : danger ? 0xE8473E : Theme.accent();
+        Draw.glass(g, x, y, w, h, h / 2, Draw.withAlpha(fill, 0.95f * a), Draw.withAlpha(border, (hv ? 0.7f : 0.3f) * a));
+        float sc = Math.min(0.88f, (w - 8) / Math.max(1, Draw.width(label, 1f)));
+        Draw.centered(g, label, x + w / 2, y + h / 2 - 3.5f, sc, Draw.withAlpha(primary ? 0xFFFFFF : danger ? 0xFFC9C9 : Theme.TEXT, a));
         actionRects.add(new float[]{x, y, w, h});
         actionRuns.add(run);
     }
@@ -657,7 +636,7 @@ public class WaypointsScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent event, boolean dbl) {
         double mx = event.x(), my = event.y();
         if (event.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT) return super.mouseClicked(event, dbl);
-        if (inside(mx, my, wx + ww - 20, wy + 5, 15, 15)) {
+        if (inside(mx, my, wx + ww - 22, wy + 6, 16, 16)) {
             onClose();
             return true;
         }
@@ -669,20 +648,20 @@ public class WaypointsScreen extends Screen {
                 return true;
             }
         }
-        searchFocus = inside(mx, my, lx, ly, lw, 16);
+        searchFocus = inside(mx, my, lx + 5, ly + 5, lw - 10, 16);
         if (searchFocus) return true;
-        float pw = (lw - 3 * 2) / 4;
+        float pw = (lw - 10 - 3 * 3) / 4;
         for (int i = 0; i < DIMS.length; i++) {
-            if (inside(mx, my, lx + i * (pw + 2), ly + 19, pw, 13)) {
+            if (inside(mx, my, lx + 5 + i * (pw + 3), ly + 25, pw, 13)) {
                 dimFilter = i;
                 click(1.1f);
                 return true;
             }
         }
         if (selected instanceof Waypoint w) {
-            float tw = (ew - 8 - 3 * 2) / 4f;
+            float tw = (ew - 12) / 4f;
             for (int i = 0; i < TABS.length; i++) {
-                if (inside(mx, my, ex + 4 + i * (tw + 2), tabY, tw, 16)) {
+                if (inside(mx, my, ex + 6 + i * tw, tabY, tw, 16)) {
                     if (tab != i) {
                         tab = i;
                         panel.setRows(waypointRows(w));
@@ -692,16 +671,16 @@ public class WaypointsScreen extends Screen {
                 }
             }
         }
-        float listY = ly + 35, listH = lh - 35 - 22;
+        float listY = ly + 43, listH = lh - 43 - 26;
         if (inside(mx, my, lx, listY, lw, listH)) {
             for (Line l : lines) {
                 float ry = listY + l.y() - scroll;
                 if (my < ry || my >= ry + l.h()) continue;
-                float eyeX = lx + 2 + lw - 6 - 10;
+                float eyeX = lx + 4 + lw - 8 - 10;
                 boolean eye = mx >= eyeX - 8;
                 if (l.item() instanceof Waypoint.Folder f) {
                     if (eye) f.visible = !f.visible;
-                    else if (mx < lx + 2 + 10 || selected == f || dbl) f.collapsed = !f.collapsed;
+                    else if (mx < lx + 4 + 10 || selected == f || dbl) f.collapsed = !f.collapsed;
                     else select(f);
                 } else if (l.item() instanceof Waypoint w) {
                     if (eye) w.visible = !w.visible;
@@ -736,7 +715,7 @@ public class WaypointsScreen extends Screen {
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
         if (dragging && drag != null) {
-            float listY = ly + 35;
+            float listY = ly + 43;
             for (Line l : lines) {
                 float ry = listY + l.y() - scroll;
                 if (event.y() < ry || event.y() >= ry + l.h() || !inside(event.x(), event.y(), lx, ry, lw, l.h())) continue;
