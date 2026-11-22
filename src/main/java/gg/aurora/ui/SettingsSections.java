@@ -106,27 +106,47 @@ public final class SettingsSections {
                 new Rows.Info("Players with 3D cosmetics", () -> gg.aurora.Settings.cosmeticQuality == 0 ? "All" : gg.aurora.Settings.cosmeticQuality == 2 ? "3 nearest" : "6 nearest"),
                 new Rows.Toggle("Aura particles", "Particles around players with an aura", () -> Settings.auraParticles, v -> Settings.auraParticles = v))));
         sections.add(new Section("Waypoints", Icons.PIN, List.of(
-                new Rows.Toggle("Waypoints", "Labels and highlighted blocks", () -> Settings.wpEnabled, v -> Settings.wpEnabled = v),
-                new Rows.Button("Open waypoints", "J key", Icons.PIN, () -> mc.setScreen(new gg.aurora.waypoint.WaypointsScreen(owner, null))),
-                new Rows.Slider("Label size", null, 0.5, 2, 0.1, () -> Settings.wpLabelScale, v -> Settings.wpLabelScale = (float) v,
+                new Rows.Toggle("Waypoints", "Labels and highlighted blocks in the world", () -> Settings.wpEnabled, v -> Settings.wpEnabled = v),
+                new Rows.Button("Manage waypoints", "Create, edit, share · " + keyName(gg.aurora.waypoint.Waypoints.openKey), Icons.PIN,
+                        () -> mc.setScreen(new gg.aurora.waypoint.WaypointsScreen(owner, null))),
+                new WaypointRows.LabelPreview(),
+                new WaypointRows.Header("Label", Icons.PENCIL),
+                new WaypointRows.DefaultStyle(),
+                new Rows.Button("Use this style everywhere", "Applies it to the waypoints you already have", Icons.CHECK, () -> {
+                    for (gg.aurora.waypoint.Waypoint w : gg.aurora.waypoint.Waypoints.LIST) w.preset = Settings.wpDefaultPreset;
+                    gg.aurora.waypoint.Waypoints.save();
+                    Toasts.push(Icons.PIN, "Waypoints", "Style applied to " + gg.aurora.waypoint.Waypoints.LIST.size() + " waypoints", false);
+                }),
+                new Rows.Slider("Size", null, 0.5, 2, 0.1, () -> Settings.wpLabelScale, v -> Settings.wpLabelScale = (float) v,
                         v -> String.format(Locale.ROOT, "%.1fx", v)),
-                new Rows.Choice("Waypoint names", new String[]{"Always", "When aimed at", "Never"}, () -> Settings.wpNames, i -> Settings.wpNames = i),
-                new Rows.Toggle("Distance", "Shows [12m] under the label", () -> Settings.wpShowDistance, v -> Settings.wpShowDistance = v),
-                new Rows.Toggle("Size by distance", "The farther the waypoint, the smaller it is", () -> Settings.wpDistScale,
+                new Rows.Choice("Show names", new String[]{"Always", "When aimed at", "Never"}, () -> Settings.wpNames, i -> Settings.wpNames = i),
+                new Rows.Toggle("Show distance", "12m next to the name", () -> Settings.wpShowDistance, v -> Settings.wpShowDistance = v),
+                new WaypointRows.Header("Distance", Icons.RULER),
+                new Rows.Toggle("Shrink when far", "Full size up to 16 blocks, then smaller", () -> Settings.wpDistScale,
                         v -> Settings.wpDistScale = v),
-                new Rows.Slider("Dot distance", "Beyond that: a plain colored dot (name when aimed at)", 0, 1000, 10,
+                new Rows.Slider("Turn into a dot beyond", "Aim at the dot to see the full label", 0, 1000, 10,
                         () -> Settings.wpDotDistance, v -> Settings.wpDotDistance = (int) Math.round(v), v -> v < 1 ? "Never" : Math.round(v) + " blocks"),
-                new Rows.Toggle("Hide up close", "Hides the label within 4 blocks", () -> Settings.wpHideNear, v -> Settings.wpHideNear = v),
-                new Rows.Slider("Max distance", null, 0, 2000, 50, () -> Settings.wpMaxDistance, v -> Settings.wpMaxDistance = (int) Math.round(v),
-                        v -> v < 1 ? "Unlimited" : Math.round(v) + " m"),
-                new Rows.Toggle("Death waypoint", "Marks where you die", () -> Settings.wpDeath, v -> Settings.wpDeath = v),
-                new Rows.Slider("Default style", null, 0, gg.aurora.waypoint.Waypoint.PRESETS.length - 1, 1, () -> Settings.wpDefaultPreset,
-                        v -> Settings.wpDefaultPreset = (int) Math.round(v), v -> gg.aurora.waypoint.Waypoint.PRESETS[(int) Math.round(v)]),
-                new Rows.Slider("Default fill", null, 0, 1, 0.05, () -> Settings.wpFill, v -> Settings.wpFill = (float) v,
-                        v -> Math.round(v * 100) + " %"),
-                new Rows.Slider("Default outline", null, 0, 1, 0.05, () -> Settings.wpOutline, v -> Settings.wpOutline = (float) v,
-                        v -> Math.round(v * 100) + " %"),
-                new Rows.Toggle("Through walls (default)", null, () -> Settings.wpThroughWalls, v -> Settings.wpThroughWalls = v))));
+                new Rows.Slider("Hide beyond", null, 0, 2000, 50, () -> Settings.wpMaxDistance, v -> Settings.wpMaxDistance = (int) Math.round(v),
+                        v -> v < 1 ? "Never" : Math.round(v) + " blocks"),
+                new Rows.Toggle("Fade out up close", "Gets out of the way when you reach it", () -> Settings.wpHideNear, v -> Settings.wpHideNear = v),
+                new Rows.Toggle("Off-screen arrows", "Waypoints behind you stay on the screen edge", () -> Settings.wpEdge, v -> Settings.wpEdge = v),
+                new WaypointRows.Header("Highlighted block · new waypoints", Icons.LAYERS),
+                new Rows.Slider("Fill", null, 0, 1, 0.05, () -> Settings.wpFill, v -> Settings.wpFill = (float) v,
+                        v -> v < 0.01 ? "None" : Math.round(v * 100) + " %"),
+                new Rows.Slider("Outline", null, 0, 1, 0.05, () -> Settings.wpOutline, v -> Settings.wpOutline = (float) v,
+                        v -> v < 0.01 ? "None" : Math.round(v * 100) + " %"),
+                new Rows.Toggle("Visible through walls", null, () -> Settings.wpThroughWalls, v -> Settings.wpThroughWalls = v),
+                new WaypointRows.Header("Automatic", Icons.SKULL),
+                new Rows.Toggle("Death waypoint", "Marks where you die, removed when you get there", () -> Settings.wpDeath, v -> Settings.wpDeath = v))));
+        sections.add(new Section("Pings", Icons.TARGET, List.of(
+                new Rows.Toggle("Pings", "Mark a spot or an item for you and the players around you", () -> Settings.pingEnabled, v -> Settings.pingEnabled = v),
+                new Rows.Info("Tap " + keyName(gg.aurora.waypoint.Pings.key), "ping · twice: danger · hold: wheel"),
+                new Rows.KeyBind("Ping key", null, () -> code(gg.aurora.waypoint.Pings.key), v -> bind(gg.aurora.waypoint.Pings.key, v)),
+                new Rows.Choice("Show pings from", new String[]{"Everyone", "Friends", "Nobody"}, () -> Settings.pingFrom, i -> Settings.pingFrom = i),
+                new Rows.Toggle("Share my pings", "Paranoia players around you see them", () -> Settings.pingShare, v -> Settings.pingShare = v),
+                new Rows.Slider("Duration", null, 3, 20, 1, () -> Settings.pingSeconds, v -> Settings.pingSeconds = (int) Math.round(v),
+                        v -> Math.round(v) + " s"),
+                new Rows.Toggle("Sound", null, () -> Settings.pingSound, v -> Settings.pingSound = v))));
         sections.add(new Section("Theme", Icons.PALETTE, List.of(
                 new Rows.Swatches(),
                 new Rows.ThemePreview())));
@@ -199,22 +219,29 @@ public final class SettingsSections {
                 {"New waypoint", gg.aurora.waypoint.Waypoints.addKey},
                 {"Zone waypoint", gg.aurora.waypoint.Waypoints.zoneKey},
                 {"Show / hide waypoints", gg.aurora.waypoint.Waypoints.toggleKey},
+                {"Ping", gg.aurora.waypoint.Pings.key},
         };
         for (Object[] k : keys) {
             net.minecraft.client.KeyMapping km = (net.minecraft.client.KeyMapping) k[1];
             if (km == null) continue;
-            r.add(new Rows.KeyBind((String) k[0], null, () -> code(km), v -> {
-                km.setKey(v < 0 ? com.mojang.blaze3d.platform.InputConstants.UNKNOWN
-                        : com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM.getOrCreate(v));
-                net.minecraft.client.KeyMapping.resetMapping();
-                Minecraft.getInstance().options.save();
-            }));
+            r.add(new Rows.KeyBind((String) k[0], null, () -> code(km), v -> bind(km, v)));
         }
         r.add(new Rows.Info("Modules", "Toggle a module with one key"));
         for (gg.aurora.module.Module m : gg.aurora.module.Modules.ALL) {
             r.add(new Rows.KeyBind(m.name, null, () -> m.key, v -> m.key = v));
         }
         return r;
+    }
+
+    private static void bind(net.minecraft.client.KeyMapping km, int v) {
+        km.setKey(v < 0 ? com.mojang.blaze3d.platform.InputConstants.UNKNOWN
+                : com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM.getOrCreate(v));
+        net.minecraft.client.KeyMapping.resetMapping();
+        Minecraft.getInstance().options.save();
+    }
+
+    private static String keyName(net.minecraft.client.KeyMapping km) {
+        return km == null || km.isUnbound() ? "(no key)" : km.getTranslatedKeyMessage().getString();
     }
 
     private static int code(net.minecraft.client.KeyMapping km) {

@@ -189,7 +189,11 @@ public final class WaypointRows {
         float cx0, cw;
 
         public Presets(Waypoint w) {
-            super("Label style", null);
+            this(w, "Label style");
+        }
+
+        public Presets(Waypoint w, String label) {
+            super(label, null);
             this.w = w;
         }
 
@@ -235,6 +239,69 @@ public final class WaypointRows {
                 }
             }
             return false;
+        }
+    }
+
+    static Waypoint sample() {
+        Waypoint w = new Waypoint();
+        w.name = "Base";
+        w.color = 0x4DA3FF;
+        w.icon = "minecraft:red_bed";
+        w.iconType = 1;
+        return w;
+    }
+
+    /** Style cards bound to the default style of new waypoints. */
+    public static class DefaultStyle extends Presets {
+        public DefaultStyle() {
+            super(sample(), "Style of new waypoints");
+        }
+
+        @Override
+        public void draw(Rows.Host h, GuiGraphics g, float x, float y, float width, int mx, int my, float a) {
+            w.preset = gg.aurora.Settings.wpDefaultPreset;
+            super.draw(h, g, x, y, width, mx, my, a);
+        }
+
+        @Override
+        public boolean click(Rows.Host h, double mx, double my, float x, float y, float width) {
+            boolean r = super.click(h, mx, my, x, y, width);
+            if (r) gg.aurora.Settings.wpDefaultPreset = w.preset;
+            return r;
+        }
+    }
+
+    /** Live preview: the same waypoint up close, mid-range and far, with the current settings. */
+    public static class LabelPreview extends Rows.Row {
+        private static final double[] DIST = {10, 90, 320};
+        private final Waypoint w = sample();
+
+        public LabelPreview() {
+            super("Preview", null);
+        }
+
+        @Override
+        public float height() {
+            return 70;
+        }
+
+        @Override
+        public void draw(Rows.Host h, GuiGraphics g, float x, float y, float width, int mx, int my, float a) {
+            hover.update(h.dt(), 0);
+            w.preset = gg.aurora.Settings.wpDefaultPreset;
+            Draw.rrect(g, x, y, width, height(), 6, Draw.withAlpha(0x2A3340, 0.95f * a));
+            Draw.rrect(g, x, y + height() * 0.62f, width, height() * 0.38f, 6, Draw.withAlpha(0x3B4A33, 0.9f * a));
+            Draw.text(g, "PREVIEW", x + 7, y + 5, 0.6f, Draw.withAlpha(0xFFFFFF, 0.6f * a));
+            g.enableScissor((int) x, (int) y, (int) (x + width), (int) (y + height()));
+            var font = Minecraft.getInstance().font;
+            for (int i = 0; i < DIST.length; i++) {
+                float cx = x + width * (1 + 2 * i) / 6f, cy = y + 46;
+                if (gg.aurora.Settings.wpMaxDistance > 0 && DIST[i] > gg.aurora.Settings.wpMaxDistance)
+                    Draw.centered(g, "hidden", cx, cy - 8, 0.7f, Draw.withAlpha(0xFFFFFF, 0.4f * a));
+                else Waypoints.drawAt(g, font, w, cx, cy, DIST[i], false, a);
+                Draw.centered(g, Math.round(DIST[i]) + " blocks away", cx, y + height() - 10, 0.62f, Draw.withAlpha(0xFFFFFF, 0.55f * a));
+            }
+            g.disableScissor();
         }
     }
 }

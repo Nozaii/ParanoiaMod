@@ -124,7 +124,8 @@ public final class Live {
         nextPoll = now + 1500;
         List<UUID> ids = new ArrayList<>();
         for (Player p : mc.level.players()) {
-            if (p == mc.player || p.distanceToSqr(mc.player) > 48 * 48) continue;
+            // 160 blocks: pings are useful far away (typing bubbles and emotes only show up close anyway)
+            if (p == mc.player || p.distanceToSqr(mc.player) > 160 * 160) continue;
             if (NametagSync.profile(p.getUUID()) != null) ids.add(p.getUUID());
         }
         if (ids.isEmpty()) {
@@ -155,6 +156,11 @@ public final class Live {
                         start = local - (serverNow - e.get("at").getAsLong());
                     }
                     STATES.put(id, new State(typing, emote, start));
+                    if (s.has("ping") && s.get("ping").isJsonObject()) {
+                        JsonObject pg = s.getAsJsonObject("ping");
+                        long at = pg.has("at") ? pg.get("at").getAsLong() : serverNow;
+                        gg.aurora.waypoint.Pings.received(id, pg, Math.max(0, serverNow - at));
+                    }
                 }
             } catch (Exception ignored) {
                 // hors ligne : pas d'état

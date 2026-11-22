@@ -10,5 +10,6 @@
   "key.aurora.music_next": "Music: next track",
   "key.aurora.music_prev": "Music: previous track",
   "key.aurora.emotes": "Emote wheel",
+  "key.aurora.ping": "Ping (tap, double tap: danger, hold: wheel)",
   "key.aurora.freelook": "Freelook"
 }

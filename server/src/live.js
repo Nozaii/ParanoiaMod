@@ -2,7 +2,8 @@
  * État « en direct » des joueurs du mod : en train d'écrire un message privé, emote en cours.
  * Et liaison du compte à Discord (OAuth2, scope identify).
  *
- * POST /v2/live        { typing: bool, emote: "wave" | "" }   (session)  -> met à jour son état
+ * POST /v2/live        { typing: bool, emote: "wave" | "", ping?: {...} }  (session)  -> met à jour son état
+ *                      ping: { id, kind, x, y, z, dim, eid?, item? } — kind "none" efface le ping
  * POST /v2/live/who    { uuids: [...] }                       -> états récents des joueurs demandés
  * POST /v2/discord/start                                    (session)  -> { url } à ouvrir dans le navigateur
  * GET  /v2/discord/callback?code&state                                 -> page « compte lié »
@@ -16,6 +17,8 @@ import { json } from "./social.js";
 
 const UUID = /^[0-9a-f]{32}$/;
 const EMOTES = ["wave", "dance", "point", "clap", "salute", "facepalm"];
+const PING_KINDS = ["go", "danger", "enemy", "loot", "defend", "help", "item", "none"];
+const PING_MS = 20000;
 let ready = false;
 
 export async function ensureTables(env) {
@@ -27,6 +30,12 @@ export async function ensureTables(env) {
       "CREATE TABLE IF NOT EXISTS discord_links (uuid TEXT PRIMARY KEY, discord_id TEXT NOT NULL, username TEXT NOT NULL, global_name TEXT, avatar TEXT, linked INTEGER NOT NULL)"
     ),
   ]);
+  // colonnes ajoutées après coup : ALTER échoue si elles existent déjà
+  for (const col of ["ping TEXT", "ping_at INTEGER NOT NULL DEFAULT 0"]) {
+    try {
+      await env.DB.prepare(`ALTER TABLE live ADD COLUMN ${col}`).run();
+    } catch {}
+  }
   ready = true;
 }
 
@@ -38,10 +47,33 @@ async function body(request) {
   }
 }
 
+function cleanPing(p) {
+  if (!p || typeof p !== "object") return null;
+  const id = String(p.id || "").slice(0, 16);
+  const kind = PING_KINDS.includes(p.kind) ? p.kind : null;
+  if (!id || !kind) return null;
+  if (kind === "none") return { id, kind };
+  const num = (v) => (Number.isFinite(v) && Math.abs(v) < 3e7 ? Math.round(v * 10) / 10 : null);
+  const x = num(p.x), y = num(p.y), z = num(p.z);
+  if (x === null || y === null || z === null) return null;
+  const out = { id, kind, x, y, z, dim: String(p.dim || "minecraft:overworld").slice(0, 64) };
+  if (Number.isInteger(p.eid)) out.eid = p.eid;
+  if (typeof p.item === "string" && /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(p.item)) out.item = p.item.slice(0, 80);
+  return out;
+}
+
 export async function live(req, env, user) {
   await ensureTables(env);
   const b = await body(req);
   const now = Date.now();
+  const ping = cleanPing(b.ping);
+  if (ping) {
+    await env.DB.prepare(
+      `INSERT INTO live (uuid, typing, ping, ping_at) VALUES (?1, 0, ?2, ?3)
+       ON CONFLICT(uuid) DO UPDATE SET ping = ?2, ping_at = ?3`
+    ).bind(user.uuid, JSON.stringify(ping), now).run();
+    return json({ ok: true, now });
+  }
   const typing = b.typing === true ? now : 0;
   const emote = EMOTES.includes(b.emote) ? b.emote : null;
   if (emote) {
@@ -65,12 +97,18 @@ export async function liveWho(req, env) {
   if (!wanted.length) return json({ now: Date.now(), live: {} });
   const now = Date.now();
   const marks = wanted.map((_, i) => `?${i + 1}`).join(",");
-  const rows = await env.DB.prepare(`SELECT uuid, typing, emote, emote_at FROM live WHERE uuid IN (${marks})`).bind(...wanted).all();
+  const rows = await env.DB.prepare(`SELECT uuid, typing, emote, emote_at, ping, ping_at FROM live WHERE uuid IN (${marks})`).bind(...wanted).all();
   const out = {};
   for (const r of rows.results) {
     const typing = now - r.typing < 4000;
     const emote = r.emote && now - r.emote_at < 8000 ? { id: r.emote, at: r.emote_at } : null;
-    if (typing || emote) out[r.uuid] = { typing, emote };
+    let ping = null;
+    if (r.ping && now - r.ping_at < PING_MS) {
+      try {
+        ping = { ...JSON.parse(r.ping), at: r.ping_at };
+      } catch {}
+    }
+    if (typing || emote || ping) out[r.uuid] = ping ? { typing, emote, ping } : { typing, emote };
   }
   return json({ now, live: out });
 }

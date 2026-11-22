@@ -125,6 +125,17 @@ public final class Settings {
     public static boolean wpThroughWalls = false;
     /** Noms des waypoints : 0 toujours, 1 seulement quand on le vise, 2 jamais. */
     public static int wpNames = 0;
+    /** Off-screen waypoints stay pinned to the screen edge with an arrow. */
+    public static boolean wpEdge = false;
+
+    // Pings
+    public static boolean pingEnabled = true;
+    /** Pings from other Paranoia players: 0 everyone nearby, 1 friends only, 2 nobody. */
+    public static int pingFrom = 0;
+    /** Share my pings with the Paranoia players around me. */
+    public static boolean pingShare = true;
+    public static boolean pingSound = true;
+    public static int pingSeconds = 8;
 
     // Rendu : upscaling
     public static int perfProfile = 1;
