@@ -115,7 +115,7 @@ public final class WaypointRows {
             Draw.glass(g, hereX, y, 44, 40, 6, Draw.withAlpha(hv ? Theme.tileHover() : Theme.ROW, 0.92f * a),
                     Draw.withAlpha(Theme.accent(), (hv ? 0.8f : 0.35f) * a));
             Draw.icon(g, Icons.PIN, hereX + 22, y + 15, 10, Draw.withAlpha(Theme.accent(), a));
-            Draw.centered(g, "Ici", hereX + 22, y + 25, 0.8f, Draw.withAlpha(Theme.TEXT, a));
+            Draw.centered(g, "Here", hereX + 22, y + 25, 0.8f, Draw.withAlpha(Theme.TEXT, a));
         }
 
         @Override
@@ -302,6 +302,104 @@ public final class WaypointRows {
                 Draw.centered(g, Math.round(DIST[i]) + " blocks away", cx, y + height() - 10, 0.62f, Draw.withAlpha(0xFFFFFF, 0.55f * a));
             }
             g.disableScissor();
+        }
+    }
+
+    /** Folder of a waypoint as chips: No folder, each folder, + New. Wraps on several lines. */
+    public static class FolderPick extends Rows.Row {
+        final java.util.function.Supplier<String> get;
+        final java.util.function.Consumer<String> set;
+        final Runnable create;
+        private float lastW = 280;
+        private final java.util.List<float[]> boxes = new java.util.ArrayList<>();
+        private final java.util.List<String> ids = new java.util.ArrayList<>();
+
+        public FolderPick(java.util.function.Supplier<String> get, java.util.function.Consumer<String> set, Runnable create) {
+            super("Folder", null);
+            this.get = get;
+            this.set = set;
+            this.create = create;
+        }
+
+        private java.util.List<String[]> chips() {
+            java.util.List<String[]> c = new java.util.ArrayList<>();
+            c.add(new String[]{"", "No folder"});
+            for (Waypoint.Folder f : Waypoints.FOLDERS) c.add(new String[]{f.id, f.name});
+            c.add(new String[]{null, "+ New folder"});
+            return c;
+        }
+
+        private float chipW(String label) {
+            return Draw.width(label, 0.8f) + (label.startsWith("+") ? 10 : 18);
+        }
+
+        /** Lays out the chips; returns the height. */
+        private float layout(float x, float y, float w) {
+            boxes.clear();
+            ids.clear();
+            float cx = x + 8, cy = y + 19, rowH = 15;
+            for (String[] c : chips()) {
+                float cw = chipW(c[1]);
+                if (cx + cw > x + w - 8 && cx > x + 8) {
+                    cx = x + 8;
+                    cy += rowH + 3;
+                }
+                boxes.add(new float[]{cx, cy, cw, rowH});
+                ids.add(c[0]);
+                cx += cw + 3;
+            }
+            return cy + rowH + 6 - y;
+        }
+
+        @Override
+        public float height() {
+            return layout(0, 0, lastW);
+        }
+
+        @Override
+        public void draw(Rows.Host h, GuiGraphics g, float x, float y, float w, int mx, int my, float a) {
+            hover.update(h.dt(), 0);
+            lastW = w;
+            float hh = layout(x, y, w);
+            Draw.rrect(g, x, y, w, hh, 6, Draw.withAlpha(Theme.ROW, 0.9f * a));
+            Draw.text(g, label, x + 9, y + 5, 1f, Draw.withAlpha(Theme.TEXT, a));
+            String cur = get.get();
+            java.util.List<String[]> c = chips();
+            for (int i = 0; i < boxes.size(); i++) {
+                float[] b = boxes.get(i);
+                String id = ids.get(i);
+                boolean sel = id != null && id.equals(cur == null ? "" : cur);
+                boolean hv = Rows.inside(mx, my, b[0], b[1], b[2], b[3]) && h.inView(my);
+                if (hv && !sel) h.pointer();
+                int fill = sel ? Theme.accent() : hv ? Theme.ROW_HOVER : 0x0E0C1C;
+                Draw.rrect(g, b[0], b[1], b[2], b[3], 4, Draw.withAlpha(fill, 0.95f * a));
+                Draw.ring(g, b[0], b[1], b[2], b[3], 4, Draw.withAlpha(0xFFFFFF, (sel ? 0.5f : hv ? 0.3f : 0.12f) * a));
+                float tx = b[0] + 5;
+                if (id != null && !id.isEmpty()) {
+                    Waypoint.Folder f = Waypoints.folder(id);
+                    if (f != null) Draw.rect(g, b[0] + 5, b[1] + b[3] / 2 - 2.5f, 5, 5, Draw.withAlpha(f.color, a));
+                    tx += 8;
+                } else if (id != null) {
+                    tx += 8;
+                    Draw.rect(g, b[0] + 5, b[1] + b[3] / 2 - 0.5f, 5, 1, Draw.withAlpha(Theme.TEXT_DIM, a));
+                }
+                Draw.text(g, c.get(i)[1], tx, b[1] + 4, 0.8f, Draw.withAlpha(sel ? 0xFFFFFF : id == null ? Theme.accent() : Theme.TEXT, a));
+            }
+        }
+
+        @Override
+        public boolean click(Rows.Host h, double mx, double my, float x, float y, float w) {
+            layout(x, y, w);
+            for (int i = 0; i < boxes.size(); i++) {
+                float[] b = boxes.get(i);
+                if (!Rows.inside(mx, my, b[0], b[1], b[2], b[3])) continue;
+                h.sound(1.1f);
+                if (ids.get(i) == null) create.run();
+                else set.accept(ids.get(i));
+                h.changed();
+                return true;
+            }
+            return false;
         }
     }
 }

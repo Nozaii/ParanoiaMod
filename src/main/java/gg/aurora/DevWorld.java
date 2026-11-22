@@ -42,6 +42,39 @@ public final class DevWorld {
         tick++;
         var p = mc.player;
         mc.getFramerateLimitTracker().onInputReceived();
+        if (Boolean.getBoolean("aurora.devwpui")) { // waypoints menu: folders, tabs, square look
+            if (tick == 20) { cmd(mc, "time set 6000"); cmd(mc, "weather clear"); mc.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
+                p.setYRot(0); p.setXRot(10);
+                gg.aurora.waypoint.Waypoints.LIST.removeIf(w -> w.name.startsWith("Dev "));
+                gg.aurora.waypoint.Waypoints.FOLDERS.removeIf(f -> f.name.startsWith("Dev "));
+                gg.aurora.waypoint.Waypoint.Folder base = new gg.aurora.waypoint.Waypoint.Folder(); base.name = "Dev Base"; base.color = 0x3AB7F0;
+                gg.aurora.waypoint.Waypoint.Folder mines = new gg.aurora.waypoint.Waypoint.Folder(); mines.name = "Dev Mines"; mines.color = 0xFFD43A;
+                gg.aurora.waypoint.Waypoints.FOLDERS.add(base); gg.aurora.waypoint.Waypoints.FOLDERS.add(mines);
+                String[][] wps = {{"Dev Home", "minecraft:red_bed", base.id}, {"Dev Farm", "minecraft:wheat", base.id}, {"Dev Diamonds", "minecraft:diamond_ore", mines.id},
+                        {"Dev Portal", "minecraft:obsidian", ""}, {"Dev Village", "minecraft:bell", ""}};
+                int[] cols = {0x3AB7F0, 0x34C759, 0xFFD43A, 0x6B5CFF, 0xFF9A2E};
+                for (int i = 0; i < wps.length; i++) {
+                    gg.aurora.waypoint.Waypoint w = new gg.aurora.waypoint.Waypoint();
+                    w.name = wps[i][0]; w.icon = wps[i][1]; w.folder = wps[i][2]; w.color = cols[i]; w.block = false; w.preset = i % 5;
+                    w.x = (int) p.getX() - 12 + i * 6; w.y = (int) p.getY() + 1; w.z = (int) p.getZ() + 14 + i * 8;
+                    w.dim = mc.level.dimension().identifier().toString();
+                    gg.aurora.waypoint.Waypoints.LIST.add(w);
+                }
+            }
+            if (tick == 40) shot(mc, "wpui_world");
+            if (tick == 44) { var sc = new gg.aurora.waypoint.WaypointsScreen(null, null); mc.setScreen(sc);
+                sc.debugSelect(gg.aurora.waypoint.Waypoints.LIST.stream().filter(w -> w.name.equals("Dev Home")).findFirst().orElse(null)); sc.debugTab(0); }
+            if (tick == 60) shot(mc, "wpui_general");
+            if (tick == 62) ((gg.aurora.waypoint.WaypointsScreen) mc.screen).debugTab(1);
+            if (tick == 76) shot(mc, "wpui_look");
+            if (tick == 78) ((gg.aurora.waypoint.WaypointsScreen) mc.screen).debugTab(2);
+            if (tick == 90) shot(mc, "wpui_highlight");
+            if (tick == 92) ((gg.aurora.waypoint.WaypointsScreen) mc.screen).debugSelect(gg.aurora.waypoint.Waypoints.FOLDERS.stream().filter(f -> f.name.equals("Dev Base")).findFirst().orElse(null));
+            if (tick == 106) shot(mc, "wpui_folder");
+            if (tick == 110) { mc.setScreen(null); gg.aurora.waypoint.Waypoints.LIST.removeIf(w -> w.name.startsWith("Dev "));
+                gg.aurora.waypoint.Waypoints.FOLDERS.removeIf(f -> f.name.startsWith("Dev ")); gg.aurora.waypoint.Waypoints.save(); mc.stop(); }
+            return;
+        }
         if (Boolean.getBoolean("aurora.devping")) { // pings (item, danger, remote, off-screen), wheel, waypoint labels, settings
             if (tick == 20) { cmd(mc, "time set 6000"); cmd(mc, "weather clear"); cmd(mc, "gamemode creative @p"); cmd(mc, "kill @e[type=item]");
                 setCosmetics(false); mc.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);

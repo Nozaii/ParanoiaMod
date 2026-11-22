@@ -481,8 +481,8 @@ public final class Waypoints {
 
     /** Distant waypoint: a colored dot with a dark rim. */
     private static void drawDot(GuiGraphics g, Waypoint w, float cx, float cy, float a) {
-        Draw.rrect(g, cx - 4, cy - 4, 8, 8, 4, Draw.withAlpha(0x000000, 0.7f * a));
-        Draw.rrect(g, cx - 2.75f, cy - 2.75f, 5.5f, 5.5f, 2.75f, Draw.withAlpha(w.color, a));
+        Draw.rect(g, cx - 3.5f, cy - 3.5f, 7, 7, Draw.withAlpha(0x000000, 0.7f * a));
+        Draw.rect(g, cx - 2.5f, cy - 2.5f, 5, 5, Draw.withAlpha(w.color, a));
     }
 
     /** Off-screen waypoint: dot pinned to the screen edge with an arrow toward it. */
@@ -527,6 +527,16 @@ public final class Waypoints {
     /** name = false: no name (dot + distance), whatever the style. */
     public static void drawLabel(GuiGraphics g, Font font, Waypoint w, float cx, float cy, double dist, float scale, boolean name, float a) {
         if (a < 0.02f) return;
+        // square, Minecraft-like boxes (like name tags)
+        Draw.squareOn();
+        try {
+            drawLabel0(g, font, w, cx, cy, dist, scale, name, a);
+        } finally {
+            Draw.squareOff();
+        }
+    }
+
+    private static void drawLabel0(GuiGraphics g, Font font, Waypoint w, float cx, float cy, double dist, float scale, boolean name, float a) {
         g.pose().pushMatrix();
         g.pose().translate(cx, cy);
         g.pose().scale(scale, scale);

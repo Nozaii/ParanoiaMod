@@ -62,6 +62,43 @@ public final class Draw {
         nine(g, GLOW, 96, 36, x - m, y - m, w + 2 * m, h + 2 * m, m * 1.5f, argb);
     }
 
+    /** Minecraft-style raised box: flat fill, light top/left edge, dark bottom/right edge. */
+    public static void bevel(GuiGraphics g, float x, float y, float w, float h, int fill, float a) {
+        rect(g, x, y, w, h, withAlpha(fill & 0xFFFFFF, (fill >>> 24) / 255f * a));
+        rect(g, x, y, w, 1, withAlpha(0xFFFFFF, 0.16f * a));
+        rect(g, x, y + 1, 1, h - 2, withAlpha(0xFFFFFF, 0.10f * a));
+        rect(g, x, y + h - 1, w, 1, withAlpha(0x000000, 0.55f * a));
+        rect(g, x + w - 1, y, 1, h - 1, withAlpha(0x000000, 0.4f * a));
+    }
+
+    /** Sunken box (fields, lists): dark top/left edge, light bottom/right edge. */
+    public static void inset(GuiGraphics g, float x, float y, float w, float h, int fill, float a) {
+        rect(g, x, y, w, h, withAlpha(fill & 0xFFFFFF, (fill >>> 24) / 255f * a));
+        rect(g, x, y, w, 1, withAlpha(0x000000, 0.55f * a));
+        rect(g, x, y + 1, 1, h - 1, withAlpha(0x000000, 0.45f * a));
+        rect(g, x, y + h - 1, w, 1, withAlpha(0xFFFFFF, 0.12f * a));
+        rect(g, x + w - 1, y + 1, 1, h - 2, withAlpha(0xFFFFFF, 0.08f * a));
+    }
+
+    /** Inventory slot, as in vanilla containers. */
+    public static void slot(GuiGraphics g, float x, float y, float s, float a) {
+        rect(g, x, y, s, s, withAlpha(0x8B8B8B, a));
+        rect(g, x, y, s - 1, 1, withAlpha(0x373737, a));
+        rect(g, x, y, 1, s - 1, withAlpha(0x373737, a));
+        rect(g, x + 1, y + s - 1, s - 1, 1, withAlpha(0xFFFFFF, a));
+        rect(g, x + s - 1, y + 1, 1, s - 1, withAlpha(0xFFFFFF, a));
+    }
+
+    /** Vanilla Minecraft font with its drop shadow, snapped to GUI pixels (titles, tabs, buttons). */
+    public static void mcText(GuiGraphics g, String s, float x, float y, int argb) {
+        if ((argb >>> 24) < 4) return;
+        g.drawString(font(), s, Math.round(x), Math.round(y), argb, true);
+    }
+
+    public static int mcWidth(String s) {
+        return font().width(s);
+    }
+
     /** Panneau "verre" : fond translucide + liseré. */
     public static void glass(GuiGraphics g, float x, float y, float w, float h, float r, int fill, int border) {
         rrect(g, x, y, w, h, r, fill);
@@ -74,9 +111,24 @@ public final class Draw {
      */
     public static float radiusScale = 0.4f;
 
+    /**
+     * Square mode (Minecraft look): while above 0, rounded shapes are drawn with sharp corners and
+     * rings become 1 px frames. Screens enable it around their render with {@link #squareOn()}.
+     */
+    public static int square;
+
+    public static void squareOn() {
+        square++;
+    }
+
+    public static void squareOff() {
+        if (square > 0) square--;
+    }
+
     private static void nine(GuiGraphics g, Identifier tex, int size, int corner, float x, float y, float w, float h, float r, int argb) {
         if ((argb >>> 24) == 0 || w <= 0 || h <= 0) return;
-        if (tex != GLOW && r < Math.min(w, h) / 2 - 0.75f) r = Math.max(1f, r * radiusScale);
+        if (square > 0 && tex != GLOW) r = 0.01f;
+        else if (tex != GLOW && r < Math.min(w, h) / 2 - 0.75f) r = Math.max(1f, r * radiusScale);
         push(g);
         float s = gs();
         int X = Math.round(x * s), Y = Math.round(y * s);
