@@ -3,7 +3,7 @@
 # Usage : sh tools/publish_update.sh   (après ./gradlew build ; nécessite « npx wrangler login »)
 set -e
 cd "$(dirname "$0")/.."
-JAR="build/libs/aurora-$(grep "^version=" gradle.properties | cut -d= -f2).jar"
+JAR="build/libs/ParanoiaMod-$(grep "^version=" gradle.properties | cut -d= -f2).jar"
 VERSION=$(grep '^version=' gradle.properties | cut -d= -f2)
 SHA=$(sha256sum "$JAR" | cut -d' ' -f1)
 SIZE=$(wc -c < "$JAR" | tr -d ' ')

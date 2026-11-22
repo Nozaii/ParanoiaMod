@@ -9,5 +9,5 @@ pluginManagement {
 	}
 }
 
-// Should match your aurora
-rootProject.name = 'aurora'
+// Project name (jar = ParanoiaMod-<version>.jar)
+rootProject.name = 'ParanoiaMod'

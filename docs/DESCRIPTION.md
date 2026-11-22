@@ -8,7 +8,7 @@ Chiffres : 178 fichiers Java (~31 800 lignes), 81 mixins, 110 modules, 43 cosmé
 
 ## 1. Installation et mise à jour
 
-- Un seul jar (`aurora-<version>.jar`) dans le dossier `mods` d'une instance Fabric 1.21.11 avec Fabric API.
+- Un seul jar (`ParanoiaMod-<version>.jar`) dans le dossier `mods` d'une instance Fabric 1.21.11 avec Fabric API.
 - **Mises à jour automatiques** : le client interroge `/v1/update` au lancement ; le nouveau jar est téléchargé en `.aurora-update.jar` et installé à la fermeture du jeu (réglage « Automatic updates », bouton « Check now » dans Settings › About).
 - Configuration dans `config/aurora.json` avec sauvegarde de secours `aurora.json.bak` ; chaque module est chargé séparément (un réglage corrompu n'efface pas les autres). Migrations de version intégrées.
 

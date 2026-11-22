@@ -3,7 +3,7 @@ plugins {
 }
 
 base {
-	archivesName = "aurora"
+	archivesName = "ParanoiaMod"
 }
 
 dependencies {

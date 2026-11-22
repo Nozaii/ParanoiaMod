@@ -6,6 +6,6 @@ if tasklist 2>/dev/null | grep -qiE "^javaw?\.exe"; then
   echo "Jeu en cours : ferme Minecraft avant d'installer." >&2
   exit 1
 fi
-JAR="build/libs/aurora-$(grep "^version=" gradle.properties | cut -d= -f2).jar"
-rm -f "$D"/aurora-*.jar "$D/.aurora-update.jar"
-cp "$JAR" "$D/" && ls -la "$D"/aurora-*.jar
+JAR="build/libs/ParanoiaMod-$(grep "^version=" gradle.properties | cut -d= -f2).jar"
+rm -f "$D"/aurora-*.jar "$D"/ParanoiaMod-*.jar "$D/.aurora-update.jar"
+cp "$JAR" "$D/" && ls -la "$D"/ParanoiaMod-*.jar
