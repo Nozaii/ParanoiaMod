@@ -7,11 +7,10 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import gg.aurora.AuroraClient;
 import gg.aurora.Settings;
-import gg.aurora.mixin.GameRendererAccessor;
+import gg.aurora.ui.Draw;
 import gg.aurora.ui.Toasts;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -33,9 +32,7 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.joml.Matrix4f;
-import org.joml.Quaternionf;
 import org.joml.Vector3f;
-import org.joml.Vector4f;
 import org.lwjgl.glfw.GLFW;
 
 import java.io.Reader;
@@ -81,6 +78,7 @@ public final class Waypoints {
         addKey = KeyBindingHelper.registerKeyBinding(new KeyMapping("key.aurora.waypoint_add", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_K, category));
         toggleKey = KeyBindingHelper.registerKeyBinding(new KeyMapping("key.aurora.waypoint_toggle", InputConstants.Type.KEYSYM, InputConstants.UNKNOWN.getValue(), category));
         zoneKey = KeyBindingHelper.registerKeyBinding(new KeyMapping("key.aurora.waypoint_zone", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_U, category));
+        Pings.init(category);
     }
 
     /** Bloc visé par la caméra (jusqu'à 160 blocs), ou la position du joueur. */
@@ -238,6 +236,7 @@ public final class Waypoints {
     // ===================================================================== tick
 
     public static void tick(Minecraft mc) {
+        Pings.tick(mc);
         String k = currentKey(mc);
         if (k == null) {
             if (key != null) save();
@@ -402,166 +401,224 @@ public final class Waypoints {
 
     // ===================================================================== étiquettes (HUD)
 
-    private record Label(Waypoint w, float sx, float sy, double dist) {}
+    private record Label(Waypoint w, float sx, float sy, double dist, boolean edge, float angle) {}
 
     private static final List<Label> LABELS = new ArrayList<>();
     private static final Map<String, ItemStack> ICONS = new HashMap<>();
+    private static final java.util.Set<String> AIMED = new java.util.HashSet<>();
 
     public static void renderHud(GuiGraphics g, DeltaTracker delta) {
         Minecraft mc = Minecraft.getInstance();
         if (!Settings.wpEnabled || hidden || mc.level == null || mc.player == null || (LIST.isEmpty() && !zonePicking) || mc.options.hideGui) return;
-        Camera cam = mc.gameRenderer.getMainCamera();
-        if (!cam.isInitialized()) return;
-        float pt = delta.getGameTimeDeltaPartialTick(true);
-        float fov = ((GameRendererAccessor) mc.gameRenderer).aurora$getFov(cam, pt, true);
-        Matrix4f proj = mc.gameRenderer.getProjectionMatrix(fov);
-        Quaternionf view = new Quaternionf(cam.rotation()).conjugate();
-        Vec3 c = cam.position();
-        String dim = mc.level.dimension().identifier().toString();
         int gw = g.guiWidth(), gh = g.guiHeight();
+        if (!Projector.begin(delta, gw, gh)) return;
+        String dim = mc.level.dimension().identifier().toString();
         double max = Settings.wpMaxDistance > 0 ? Settings.wpMaxDistance : Double.MAX_VALUE;
         LABELS.clear();
-        Vector3f p = new Vector3f();
-        Vector4f clip = new Vector4f();
+        float[] s = new float[3];
         for (Waypoint w : LIST) {
             if (!shown(w) || !w.dim.equals(dim)) continue;
-            double dx = (w.minX() + w.maxX() + 1) / 2.0 - c.x, dy = w.maxY() + 1.15 - c.y, dz = (w.minZ() + w.maxZ() + 1) / 2.0 - c.z;
+            double x = (w.minX() + w.maxX() + 1) / 2.0, y = w.maxY() + 1.15, z = (w.minZ() + w.maxZ() + 1) / 2.0;
+            double dx = x - Projector.camX(), dy = y - Projector.camY(), dz = z - Projector.camZ();
             double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (dist > max) continue;
-            if (Settings.wpHideNear && dist < 3.5) continue;
-            p.set((float) dx, (float) dy, (float) dz);
-            view.transform(p);
-            clip.set(p, 1);
-            proj.transform(clip);
-            if (clip.w <= 0.05f) continue;
-            float nx = clip.x / clip.w, ny = clip.y / clip.w;
-            if (nx < -1.2f || nx > 1.2f || ny < -1.2f || ny > 1.2f) continue;
-            LABELS.add(new Label(w, (nx * 0.5f + 0.5f) * gw, (1 - (ny * 0.5f + 0.5f)) * gh, dist));
+            if (Settings.wpHideNear && dist < 3) continue;
+            boolean front = Projector.project(x, y, z, s);
+            if (front && Projector.onScreen(s, 40)) {
+                LABELS.add(new Label(w, s[0], s[1], dist, false, 0));
+            } else if (Settings.wpEdge) {
+                float ang = Projector.clampToEdge(s, front, 18);
+                LABELS.add(new Label(w, s[0], s[1], dist, true, ang));
+            }
         }
-        LABELS.sort((a, b) -> Double.compare(b.dist(), a.dist()));
+        // far first, the nearest on top; stable order for equal distances (no flicker)
+        LABELS.sort((a, b) -> {
+            int c = Double.compare(b.dist(), a.dist());
+            return c != 0 ? c : a.w().id.compareTo(b.w().id);
+        });
         float cxs = gw / 2f, cys = gh / 2f;
         for (Label l : LABELS) {
-            // plus loin = plus petit : pleine taille jusqu'à 16 blocs, puis jusqu'à 45 %
-            float k = Settings.wpDistScale ? (float) (0.45 + 0.55 * Math.min(1, 16 / Math.max(16, l.dist()))) : 1;
-            // visée avec hystérésis : entre dans 14 px, sort au-delà de 26 px (plus de clignotement)
+            if (l.edge()) {
+                drawEdge(g, l.w(), l.sx(), l.sy(), l.angle(), l.dist());
+                continue;
+            }
+            // aim with hysteresis: in under 14 px, out past 26 px
             double off = Math.hypot(l.sx() - cxs, l.sy() - cys);
             boolean was = AIMED.contains(l.w().id);
             boolean aimed = off < 14 || was && off < 26;
             if (aimed) AIMED.add(l.w().id);
             else AIMED.remove(l.w().id);
-            boolean far = Settings.wpDotDistance > 0 && l.dist() > Settings.wpDotDistance;
-            boolean name = Settings.wpNames == 0 || Settings.wpNames == 1 && aimed;
-            if (far && !aimed) {
-                drawDot(g, l.w(), l.sx(), l.sy());
-            } else {
-                drawLabel(g, mc.font, l.w(), l.sx(), l.sy(), l.dist(), Settings.wpLabelScale * k, name);
-            }
+            // fades in when walking away from it instead of popping
+            float alpha = Settings.wpHideNear ? Draw.clamp01((float) (l.dist() - 3) / 3f) : 1;
+            drawAt(g, mc.font, l.w(), l.sx(), l.sy(), l.dist(), aimed, alpha);
         }
         if (zonePicking) {
             BlockPos a = zoneStart != null ? zoneStart : target(mc), b = target(mc);
             String size = (Math.abs(a.getX() - b.getX()) + 1) + " × " + (Math.abs(a.getY() - b.getY()) + 1) + " × " + (Math.abs(a.getZ() - b.getZ()) + 1);
             String key = zoneKey.getTranslatedKeyMessage().getString();
             String msg = zoneStart == null ? "Zone: aim at the 1st corner · " + key : "Zone " + size + " · aim at the 2nd corner · " + key;
-            int tw = mc.font.width(msg);
-            int x = gw / 2 - tw / 2, y = gh / 2 + 14;
-            g.fill(x - 5, y - 3, x + tw + 5, y + 11, 0xB0101014);
-            g.fill(x - 5, y - 3, x - 4, y + 11, 0xFF4DA3FF);
-            g.drawString(mc.font, msg, x, y, 0xFFFFFFFF, true);
-            String hint = "Sneak + left click: cancel";
-            g.drawString(mc.font, hint, gw / 2 - mc.font.width(hint) / 2, y + 14, 0xFFA0A4AC, true);
+            float tw = Draw.width(msg, 1f);
+            float x = gw / 2f - tw / 2, y = gh / 2f + 16;
+            Draw.rrect(g, x - 7, y - 4, tw + 14, 16, 8, 0xD0101014);
+            Draw.text(g, msg, x, y, 1f, 0xFFFFFFFF);
+            Draw.centered(g, "Sneak + left click: cancel", gw / 2f, y + 17, 0.8f, 0xFFA0A4AC);
         }
     }
 
-    /** Waypoint lointain : simple point de couleur avec un liseré sombre et un léger halo. */
-    private static void drawDot(GuiGraphics g, Waypoint w, float cx, float cy) {
-        int col = 0xFF000000 | w.color;
-        gg.aurora.ui.Draw.glow(g, cx - 4, cy - 4, 8, 8, 5, gg.aurora.ui.Draw.withAlpha(w.color, 0.35f));
-        gg.aurora.ui.Draw.rrect(g, cx - 3.5f, cy - 3.5f, 7, 7, 3.5f, 0xC0000000);
-        gg.aurora.ui.Draw.rrect(g, cx - 2.5f, cy - 2.5f, 5, 5, 2.5f, col);
+    /** A label with the in-world rules (size by distance, dot when far, names). Also drives the settings preview. */
+    public static void drawAt(GuiGraphics g, Font font, Waypoint w, float x, float y, double dist, boolean aimed, float alpha) {
+        // smaller with distance (full size up to 16 blocks, down to 50 %), in steps so text never shimmers
+        float k = 1;
+        if (Settings.wpDistScale) {
+            k = (float) (0.5 + 0.5 * Math.min(1, 16 / Math.max(16, dist)));
+            k = Math.round(k * 20) / 20f;
+        }
+        boolean far = Settings.wpDotDistance > 0 && dist > Settings.wpDotDistance;
+        boolean name = Settings.wpNames == 0 || Settings.wpNames == 1 && aimed;
+        if (far && !aimed) drawDot(g, w, x, y, alpha);
+        else drawLabel(g, font, w, x, y, dist, Settings.wpLabelScale * (aimed ? Math.max(k, 0.9f) : k), name, alpha);
     }
 
-    /** Étiquette d'un waypoint centrée en (cx, cy). Aussi utilisée pour l'aperçu dans le menu. */
+    /** Distant waypoint: a colored dot with a dark rim. */
+    private static void drawDot(GuiGraphics g, Waypoint w, float cx, float cy, float a) {
+        Draw.rrect(g, cx - 4, cy - 4, 8, 8, 4, Draw.withAlpha(0x000000, 0.7f * a));
+        Draw.rrect(g, cx - 2.75f, cy - 2.75f, 5.5f, 5.5f, 2.75f, Draw.withAlpha(w.color, a));
+    }
+
+    /** Off-screen waypoint: dot pinned to the screen edge with an arrow toward it. */
+    private static void drawEdge(GuiGraphics g, Waypoint w, float cx, float cy, float angle, double dist) {
+        edgeArrow(g, cx, cy, angle, w.color, 0.9f);
+        if (Settings.wpShowDistance) {
+            String d = distText(dist);
+            float tw = Draw.width(d, 0.7f);
+            float tx = Math.max(4, Math.min(cx - tw / 2, Minecraft.getInstance().getWindow().getGuiScaledWidth() - tw - 4));
+            float ty = cy + (Math.sin(angle) > 0.5 ? -17 : 10);
+            shadowText(g, d, tx, ty, 0.7f, 0xE0FFFFFF);
+        }
+    }
+
+    /** Small round marker with a chevron pointing at angle (radians, 0 = right). Shared with pings. */
+    public static void edgeArrow(GuiGraphics g, float cx, float cy, float angle, int rgb, float a) {
+        g.pose().pushMatrix();
+        g.pose().translate(cx, cy);
+        g.pose().rotate(angle - (float) (Math.PI / 2));
+        Draw.icon(g, gg.aurora.ui.Icons.CARET_DOWN, 0.5f, 10.5f, 13, Draw.withAlpha(0x000000, 0.5f * a));
+        Draw.icon(g, gg.aurora.ui.Icons.CARET_DOWN, 0, 10, 13, Draw.withAlpha(rgb, a));
+        g.pose().popMatrix();
+        Draw.rrect(g, cx - 6, cy - 6, 12, 12, 6, Draw.withAlpha(0x000000, 0.65f * a));
+        Draw.rrect(g, cx - 4, cy - 4, 8, 8, 4, Draw.withAlpha(rgb, a));
+    }
+
+    public static String distText(double dist) {
+        return dist < 1000 ? Math.round(dist) + "m" : String.format(java.util.Locale.ROOT, "%.1fkm", dist / 1000);
+    }
+
+    /** Waypoint label anchored at (cx, cy), content above the anchor. Also used by the previews in the menus. */
     public static void drawLabel(GuiGraphics g, Font font, Waypoint w, float cx, float cy, double dist, float scale) {
-        drawLabel(g, font, w, cx, cy, dist, scale, true);
+        drawLabel(g, font, w, cx, cy, dist, scale, true, 1);
     }
 
-    private static final java.util.Set<String> AIMED = new java.util.HashSet<>();
-
-    /** name = false : pas de nom (losange + distance), quel que soit le style. */
     public static void drawLabel(GuiGraphics g, Font font, Waypoint w, float cx, float cy, double dist, float scale, boolean name) {
+        drawLabel(g, font, w, cx, cy, dist, scale, name, 1);
+    }
+
+    private static final int GLASS = 0x121419;
+
+    /** name = false: no name (dot + distance), whatever the style. */
+    public static void drawLabel(GuiGraphics g, Font font, Waypoint w, float cx, float cy, double dist, float scale, boolean name, float a) {
+        if (a < 0.02f) return;
         g.pose().pushMatrix();
         g.pose().translate(cx, cy);
         g.pose().scale(scale, scale);
-        String d = "[" + (dist < 1000 ? Math.round(dist) + "m" : String.format(java.util.Locale.ROOT, "%.1fkm", dist / 1000)) + "]";
+        String d = distText(dist);
         boolean showD = Settings.wpShowDistance;
-        int dark = 0xA0101014, col = 0xFF000000 | w.color;
-        int colored = 0xC0000000 | w.color;
         int preset = !name && (w.preset == 0 || w.preset == 3) ? 4 : w.preset;
+        float ts = 0.9f, ds = 0.75f;
         switch (preset) {
-            case 1, 2 -> { // icône dans un carré, distance dessous
-                int bg = w.preset == 2 ? colored : dark;
-                g.fill(-11, -24, 11, -2, bg);
-                if (w.preset == 1) g.fill(-11, -24, 11, -23, col);
-                drawIcon(g, font, w, 0, -13);
-                if (showD) pill(g, font, d, 2, 0xFFFFFFFF, dark);
+            case 1, 2 -> { // icon in a rounded square, distance under it
+                boolean filled = preset == 2;
+                float s = 20, y0 = showD ? -31 : -22;
+                Draw.rrect(g, -s / 2, y0, s, s, 5, Draw.withAlpha(filled ? w.color : GLASS, (filled ? 0.95f : 0.85f) * a));
+                Draw.ring(g, -s / 2, y0, s, s, 5, Draw.withAlpha(filled ? 0xFFFFFF : w.color, (filled ? 0.25f : 0.9f) * a));
+                drawIcon(g, font, w, 0, y0 + s / 2, filled ? contrast(w.color) : 0xFFFFFF, a);
+                if (showD) shadowText(g, d, -Draw.width(d, ds) / 2, y0 + s + 3, ds, Draw.withAlpha(0xFFFFFF, a));
+                anchor(g, w.color, a * 0.9f);
             }
-            case 3 -> { // texte coloré
-                int tw = font.width(w.name);
-                g.fill(-tw / 2 - 3, -14, tw / 2 + 3, -2, colored);
-                g.drawString(font, w.name, -tw / 2, -12, 0xFFFFFFFF, true);
-                if (showD) pill(g, font, d, 1, 0xFFFFFFFF, dark);
+            case 3 -> { // colored pill
+                float tw = Draw.width(w.name, ts), dw = showD ? Draw.width(d, ds) + 6 : 0;
+                float pw = tw + dw + 12, h = 13, y0 = -h - 5;
+                int fg = contrast(w.color);
+                Draw.rrect(g, -pw / 2, y0, pw, h, h / 2, Draw.withAlpha(w.color, 0.95f * a));
+                Draw.text(g, w.name, -pw / 2 + 6, y0 + 3, ts, Draw.withAlpha(fg, a));
+                if (showD) Draw.text(g, d, -pw / 2 + 6 + tw + 6, y0 + 3.8f, ds, Draw.withAlpha(fg, 0.7f * a));
+                anchor(g, w.color, a);
             }
-            case 4 -> { // simple : losange + distance
-                g.pose().pushMatrix();
-                g.pose().rotate((float) Math.toRadians(45));
-                g.fill(-3, -3, 3, 3, 0xFF000000);
-                g.fill(-2, -2, 2, 2, col);
-                g.pose().popMatrix();
-                if (showD) {
-                    int tw = font.width(d);
-                    g.drawString(font, d, -tw / 2, 6, 0xFFFFFFFF, true);
-                }
+            case 4 -> { // simple: dot + distance
+                Draw.rrect(g, -4, -8, 8, 8, 4, Draw.withAlpha(0x000000, 0.7f * a));
+                Draw.rrect(g, -2.75f, -6.75f, 5.5f, 5.5f, 2.75f, Draw.withAlpha(w.color, a));
+                if (showD) shadowText(g, d, -Draw.width(d, ds) / 2, 2, ds, Draw.withAlpha(0xFFFFFF, a));
             }
-            default -> { // texte (+ icône à gauche si elle existe)
-                ItemStack icon = w.iconType == 1 ? icon(w) : ItemStack.EMPTY;
-                int tw = font.width(w.name), iw = icon.isEmpty() ? 0 : 12;
-                int x0 = -(tw + iw) / 2 - 3, x1 = (tw + iw) / 2 + 3;
-                g.fill(x0, -14, x1, -2, dark);
-                g.fill(x0, -14, x0 + 1, -2, col);
-                if (!icon.isEmpty()) {
+            default -> { // glass pill: [icon or dot] name · distance
+                ItemStack icon = w.iconType == 1 && a > 0.6f ? icon(w) : ItemStack.EMPTY;
+                float tw = Draw.width(w.name, ts), dw = showD ? Draw.width(d, ds) + 6 : 0;
+                float lead = icon.isEmpty() ? 9 : 13;
+                float pw = 6 + lead + tw + dw + 6, h = 14, y0 = -h - 5;
+                float x0 = -pw / 2;
+                Draw.rrect(g, x0, y0, pw, h, h / 2, Draw.withAlpha(GLASS, 0.82f * a));
+                Draw.ring(g, x0, y0, pw, h, h / 2, Draw.withAlpha(0xFFFFFF, 0.08f * a));
+                if (icon.isEmpty()) {
+                    Draw.rrect(g, x0 + 6, y0 + h / 2 - 2.5f, 5, 5, 2.5f, Draw.withAlpha(w.color, a));
+                } else {
                     g.pose().pushMatrix();
-                    g.pose().translate(x0 + 2, -13);
+                    g.pose().translate(x0 + 5, y0 + 2);
                     g.pose().scale(0.625f, 0.625f);
                     g.renderItem(icon, 0, 0);
                     g.pose().popMatrix();
                 }
-                g.drawString(font, w.name, x0 + 3 + iw, -12, 0xFFFFFFFF, true);
-                if (showD) pill(g, font, d, 1, 0xFFE0E0E0, dark);
+                float tx = x0 + 6 + lead;
+                Draw.text(g, w.name, tx, y0 + 3.5f, ts, Draw.withAlpha(0xFFFFFF, a));
+                if (showD) Draw.text(g, d, tx + tw + 6, y0 + 4.3f, ds, Draw.withAlpha(0xFFFFFF, 0.6f * a));
+                anchor(g, w.color, a);
             }
         }
         g.pose().popMatrix();
     }
 
-    private static void drawIcon(GuiGraphics g, Font font, Waypoint w, float cx, float cy) {
-        if (w.iconType == 1) {
+    /** Little dot that marks the exact spot under a label. */
+    private static void anchor(GuiGraphics g, int rgb, float a) {
+        Draw.rrect(g, -2.5f, -2.5f, 5, 5, 2.5f, Draw.withAlpha(0x000000, 0.6f * a));
+        Draw.rrect(g, -1.5f, -1.5f, 3, 3, 1.5f, Draw.withAlpha(rgb, a));
+    }
+
+    /** Black or white, whichever reads best on rgb. */
+    public static int contrast(int rgb) {
+        int r = rgb >> 16 & 255, gr = rgb >> 8 & 255, b = rgb & 255;
+        return 0.299 * r + 0.587 * gr + 0.114 * b > 170 ? 0x15161A : 0xFFFFFF;
+    }
+
+    /** Text without background: soft shadow for legibility over the world. */
+    public static void shadowText(GuiGraphics g, String s, float x, float y, float scale, int argb) {
+        Draw.text(g, s, x + 0.6f, y + 0.6f, scale, Draw.withAlpha(0x000000, (argb >>> 24) / 255f * 0.75f));
+        Draw.text(g, s, x, y, scale, argb);
+    }
+
+    private static void drawIcon(GuiGraphics g, Font font, Waypoint w, float cx, float cy, int fg, float a) {
+        if (w.iconType == 1 && a > 0.6f) {
             ItemStack s = icon(w);
             if (!s.isEmpty()) {
                 g.renderItem(s, Math.round(cx - 8), Math.round(cy - 8));
                 return;
             }
         }
-        String letter = w.iconType == 0 ? "•" : w.name.isEmpty() ? "?" : w.name.substring(0, 1).toUpperCase();
-        int tw = font.width(letter);
-        g.drawString(font, letter, Math.round(cx - tw / 2f), Math.round(cy - 4), 0xFFFFFFFF, true);
+        if (w.iconType == 0) {
+            Draw.rrect(g, cx - 3, cy - 3, 6, 6, 3, Draw.withAlpha(fg, a));
+            return;
+        }
+        String letter = w.name.isEmpty() ? "?" : w.name.substring(0, 1).toUpperCase();
+        Draw.centered(g, letter, cx, cy - 4, 1.05f, Draw.withAlpha(fg, a));
     }
 
     private static ItemStack icon(Waypoint w) {
         return ICONS.computeIfAbsent(w.icon, k -> iconStack(w));
-    }
-
-    private static void pill(GuiGraphics g, Font font, String s, int y, int color, int bg) {
-        int tw = font.width(s);
-        g.fill(-tw / 2 - 2, y, tw / 2 + 2, y + 11, bg);
-        g.drawString(font, s, -tw / 2, y + 2, color, true);
     }
 }

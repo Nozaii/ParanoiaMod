@@ -335,6 +335,21 @@ public final class Friends {
         });
     }
 
+    /** Publishes my latest ping (kind "none" clears it). */
+    public static void sendPing(JsonObject ping) {
+        if (Settings.socialToken.isEmpty()) return;
+        JsonObject b = new JsonObject();
+        b.addProperty("typing", false);
+        b.add("ping", ping);
+        EXEC.execute(() -> {
+            try {
+                http("POST", "/v2/live", b);
+            } catch (Exception ignored) {
+                // ephemeral: a lost ping is fine
+            }
+        });
+    }
+
     /** Demande l'état en direct de plusieurs joueurs (appel bloquant, à faire hors du thread de rendu). */
     public static JsonObject fetchLive(java.util.Collection<UUID> ids) throws Exception {
         JsonObject b = new JsonObject();

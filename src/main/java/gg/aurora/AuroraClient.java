@@ -99,6 +99,7 @@ public class AuroraClient implements ClientModInitializer {
             var fx = gg.aurora.render.FxBatch.begin(ctx.consumers());
             { long t_ = gg.aurora.Prof.start(); gg.aurora.cosmetic.HitSlashes.renderWorld(ctx.matrices(), fx, cam, pt); gg.aurora.Prof.stop(gg.aurora.Prof.KILL, t_); }
             gg.aurora.waypoint.Waypoints.renderWorld(ctx.matrices(), fx, cam);
+            gg.aurora.waypoint.Pings.renderWorld(ctx.matrices(), fx, cam);
             gg.aurora.module.CombatModules.renderHitboxes(ctx.matrices(), fx, cam, pt);
             { long t_ = gg.aurora.Prof.start(); gg.aurora.module.VisualModules.renderWorld(ctx.matrices(), fx, cam, pt); gg.aurora.Prof.stop(gg.aurora.Prof.VISUAL_WORLD, t_); }
             { long t_ = gg.aurora.Prof.start(); gg.aurora.cosmetic.AuraFx.renderWorld(ctx.matrices(), fx, cam, pt); gg.aurora.Prof.stop(gg.aurora.Prof.AURA, t_); }
@@ -172,6 +173,8 @@ public class AuroraClient implements ClientModInitializer {
 
         // étiquettes des waypoints : sous tous les autres éléments du HUD
         HudElementRegistry.addFirst(Identifier.fromNamespaceAndPath(MOD_ID, "waypoints"), gg.aurora.waypoint.Waypoints::renderHud);
+        HudElementRegistry.attachElementAfter(Identifier.fromNamespaceAndPath(MOD_ID, "waypoints"), Identifier.fromNamespaceAndPath(MOD_ID, "pings"),
+                gg.aurora.waypoint.Pings::renderHud);
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "modules"), (g, delta) -> {
             Minecraft mc = Minecraft.getInstance();
             Modules.sampleClicks();

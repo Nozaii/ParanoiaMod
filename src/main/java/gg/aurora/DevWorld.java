@@ -42,6 +42,71 @@ public final class DevWorld {
         tick++;
         var p = mc.player;
         mc.getFramerateLimitTracker().onInputReceived();
+        if (Boolean.getBoolean("aurora.devping")) { // pings (item, danger, remote, off-screen), wheel, waypoint labels, settings
+            if (tick == 20) { cmd(mc, "time set 6000"); cmd(mc, "weather clear"); cmd(mc, "gamemode creative @p"); cmd(mc, "kill @e[type=item]");
+                setCosmetics(false); mc.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
+                p.setYRot(0); p.setXRot(18); }
+            if (tick == 30) {
+                net.minecraft.world.phys.Vec3 at = p.position().add(0, 0, 5);
+                cmd(mc, String.format(java.util.Locale.ROOT, "summon item %.1f %.1f %.1f {Item:{id:\"minecraft:diamond\",count:3},PickupDelay:32767,Age:-32768}", at.x, at.y + 1, at.z));
+                gg.aurora.waypoint.Waypoints.LIST.removeIf(w -> w.name.startsWith("Dev "));
+                String[] names = {"Dev Base", "Dev Mine", "Dev Farm", "Dev Portal", "Dev Tower"};
+                int[] cols = {0x4DA3FF, 0xFFD43A, 0x34C759, 0x6B5CFF, 0xE8473E};
+                for (int i = 0; i < 5; i++) {
+                    gg.aurora.waypoint.Waypoint w = new gg.aurora.waypoint.Waypoint();
+                    w.name = names[i]; w.preset = i; w.color = cols[i]; w.block = false;
+                    w.x = (int) p.getX() - 16 + i * 8; w.y = (int) p.getY() + 2; w.z = (int) p.getZ() + 22 + i * 14;
+                    w.dim = mc.level.dimension().identifier().toString();
+                    w.icon = new String[]{"minecraft:red_bed", "minecraft:iron_pickaxe", "minecraft:wheat", "minecraft:obsidian", "minecraft:stone_bricks"}[i];
+                    gg.aurora.waypoint.Waypoints.LIST.add(w);
+                }
+                gg.aurora.waypoint.Waypoint behind = new gg.aurora.waypoint.Waypoint();
+                behind.name = "Dev Behind"; behind.block = false; behind.x = (int) p.getX() + 30; behind.y = (int) p.getY(); behind.z = (int) p.getZ() - 40;
+                behind.dim = mc.level.dimension().identifier().toString();
+                gg.aurora.waypoint.Waypoints.LIST.add(behind);
+                Settings.wpEdge = true;
+            }
+            if (tick == 50) { // item under the crosshair
+                p.setXRot(32);
+                for (var it : mc.level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, p.getBoundingBox().inflate(12))) {
+                    net.minecraft.world.phys.Vec3 d = it.position().add(0, 0.15, 0).subtract(p.getEyePosition());
+                    p.setYRot((float) Math.toDegrees(Math.atan2(-d.x, d.z)));
+                    p.setXRot((float) Math.toDegrees(-Math.atan2(d.y, Math.hypot(d.x, d.z))));
+                }
+                gg.aurora.waypoint.Pings.Target t = gg.aurora.waypoint.Pings.aim(mc);
+                AuroraClient.LOGGER.info("devping aim: {}", t);
+                gg.aurora.waypoint.Pings.choose(t, t != null ? t.auto() : gg.aurora.waypoint.Pings.Kind.GO);
+                p.setXRot(12); p.setYRot(-25);
+                gg.aurora.waypoint.Pings.Target t2 = gg.aurora.waypoint.Pings.aim(mc);
+                if (t2 != null) gg.aurora.waypoint.Pings.choose(t2, gg.aurora.waypoint.Pings.Kind.DANGER);
+                p.setYRot(0); p.setXRot(18);
+                com.google.gson.JsonObject o = new com.google.gson.JsonObject();
+                o.addProperty("id", "remote1"); o.addProperty("kind", "help");
+                o.addProperty("x", p.getX() + 9); o.addProperty("y", p.getY() + 1); o.addProperty("z", p.getZ() + 14);
+                o.addProperty("dim", mc.level.dimension().identifier().toString());
+                gg.aurora.waypoint.Pings.received(java.util.UUID.randomUUID(), o, 0);
+                com.google.gson.JsonObject o2 = o.deepCopy(); o2.addProperty("id", "remote2"); o2.addProperty("kind", "enemy");
+                o2.addProperty("x", p.getX() - 30); o2.addProperty("z", p.getZ() - 20);
+                gg.aurora.waypoint.Pings.received(java.util.UUID.randomUUID(), o2, 0);
+            }
+            if (tick == 62) shot(mc, "ping_world");
+            if (tick == 70) { p.setYRot(140); p.setXRot(18); }
+            if (tick == 74) shot(mc, "ping_edge");
+            if (tick == 80) { p.setYRot(0); p.setXRot(32); gg.aurora.waypoint.Pings.devHold = true;
+                mc.setScreen(new gg.aurora.ui.PingWheelScreen(gg.aurora.waypoint.Pings.aim(mc))); }
+            if (tick == 84) { double sc = mc.getWindow().getGuiScale();
+                org.lwjgl.glfw.GLFW.glfwSetCursorPos(mc.getWindow().handle(), mc.getWindow().getScreenWidth() / 2.0 + 60 * sc, mc.getWindow().getScreenHeight() / 2.0 - 36 * sc); }
+            if (tick == 92) shot(mc, "ping_wheel");
+            if (tick == 96) { gg.aurora.waypoint.Pings.devHold = false; mc.setScreen(null); }
+            if (tick == 104) { gg.aurora.ui.SettingsScreen st = new gg.aurora.ui.SettingsScreen(null); mc.setScreen(st);
+                for (int i = 0; i < st.sectionCount(); i++) if (gg.aurora.ui.SettingsSections.build(st).get(i).name().equals("Waypoints")) st.debugSection(i); }
+            if (tick == 130) shot(mc, "ping_settings_wp");
+            if (tick == 134) { gg.aurora.ui.SettingsScreen st = (gg.aurora.ui.SettingsScreen) mc.screen;
+                for (int i = 0; i < st.sectionCount(); i++) if (gg.aurora.ui.SettingsSections.build(st).get(i).name().equals("Pings")) st.debugSection(i); }
+            if (tick == 150) shot(mc, "ping_settings_ping");
+            if (tick == 156) { gg.aurora.waypoint.Waypoints.LIST.removeIf(w -> w.name.startsWith("Dev ")); Settings.wpEdge = false; mc.stop(); }
+            return;
+        }
         if (Boolean.getBoolean("aurora.devsat")) { // saturation (contours dorés, aperçu) puis élytres d'une cape importée
             if (tick == 20) { cmd(mc, "time set 6000"); cmd(mc, "weather clear"); cmd(mc, "spreadplayers 60 60 0 1 false @p"); cmd(mc, "gamemode survival @p");
                 setCosmetics(false); Settings.back = ""; Settings.pet = ""; gg.aurora.module.NewModules.SATURATION.enabled = true;

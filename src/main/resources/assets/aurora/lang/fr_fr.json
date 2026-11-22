@@ -10,5 +10,6 @@
   "key.aurora.music_next": "Musique : piste suivante",
   "key.aurora.music_prev": "Musique : piste précédente",
   "key.aurora.emotes": "Roue d'emotes",
+  "key.aurora.ping": "Ping (appui, double appui : danger, maintenir : roue)",
   "key.aurora.freelook": "Freelook (regarder autour)"
 }
