@@ -75,6 +75,12 @@ public class WaypointsScreen extends Screen {
     private String shareTo = "";
     // ---- editor: fallback scroll when the card is taller than the panel (zone + highlight on a small GUI scale)
     private float cardScroll, cardMax;
+    /** 0 = compact, 1 = airy: grows while there is free space under the card, so it fills the panel. */
+    private float breath;
+
+    private float L(float compact, float airy) {
+        return compact + (airy - compact) * breath;
+    }
     private float clipTop = -1e9f, clipBottom = 1e9f;
 
     private record Line(Object item, int depth, float y, float h) {}
@@ -398,13 +404,13 @@ public class WaypointsScreen extends Screen {
     private void waypointCard(GuiGraphics g, Waypoint w, int mx, int my, float a) {
         boolean isNew = w == creating;
         float x0 = ex + PAD, top = ey + PAD - cardScroll, W = ew - 2 * PAD;
-        float by = ey + eh - 24, bh = 17;
+        float bh = L(17, 21), by = ey + eh - bh - L(7, 10), sg = L(6, 16), cg = L(9, 12);
         g.enableScissor((int) ex, (int) ey, (int) (ex + ew), (int) (by - 6));
         clipTop = ey;
         clipBottom = by - 6;
 
         // ---- top: name + meta, live preview on the right
-        float pvw = Math.min(118, W * 0.38f), pvh = 28, pvx = ex + ew - PAD - pvw;
+        float pvw = Math.min(118, W * 0.38f), pvh = L(28, 38), pvx = ex + ew - PAD - pvw;
         Draw.rrect(g, pvx, top, pvw, pvh, 6, Draw.withAlpha(0x2A2F38, a));
         for (int i = 0; i * 8 < pvw - 6; i++) for (int j = 0; j * 8 < pvh - 6; j++) if ((i + j) % 2 == 0)
             g.fill((int) (pvx + 3 + i * 8), (int) (top + 3 + j * 8), (int) Math.min(pvx + pvw - 3, pvx + 3 + i * 8 + 8),
@@ -421,14 +427,14 @@ public class WaypointsScreen extends Screen {
         if (isNew) {
             String t = w.area ? "NEW ZONE" : "NEW";
             float tw = Draw.width(t, 0.6f) + 8;
-            Draw.rrect(g, x0, top + 19, tw, 10, 5, Draw.withAlpha(Theme.accent(), 0.9f * a));
-            Draw.text(g, t, x0 + 4, top + 21.5f, 0.6f, Draw.withAlpha(0xFFFFFF, a));
+            Draw.rrect(g, x0, top + 19 + L(0, 3), tw, 10, 5, Draw.withAlpha(Theme.accent(), 0.9f * a));
+            Draw.text(g, t, x0 + 4, top + 21.5f + L(0, 3), 0.6f, Draw.withAlpha(0xFFFFFF, a));
             mxo += tw + 5;
         }
-        Draw.text(g, meta.toString(), mxo, top + 20.5f, 0.72f, Draw.withAlpha(Theme.TEXT_MUTED, a));
+        Draw.text(g, meta.toString(), mxo, top + 20.5f + L(0, 3), 0.72f, Draw.withAlpha(Theme.TEXT_MUTED, a));
 
         // ---- one column, always the same order: where, folder, style, color + icon, display
-        float y = top + pvh + 7;
+        float y = top + pvh + sg;
         Draw.rect(g, x0, y - 4, W, 1, Draw.withAlpha(0xFFFFFF, 0.06f * a));
         caption(g, w.area ? "CORNERS" : "POSITION", x0, y, a);
         float rx = x0 + W;
@@ -449,46 +455,48 @@ public class WaypointsScreen extends Screen {
         }
         if (w.area) { // both corners on one line
             float half = (W - 10) / 2;
-            xyz(g, w, false, x0, y + 9, half, mx, my, a);
-            Draw.icon(g, Icons.CHEVRONS, x0 + half + 5, y + 18, 6, Draw.withAlpha(Theme.TEXT_MUTED, a));
-            y = xyz(g, w, true, x0 + half + 10, y + 9, half, mx, my, a);
+            xyz(g, w, false, x0, y + cg, half, mx, my, a);
+            Draw.icon(g, Icons.CHEVRONS, x0 + half + 5, y + cg + L(16, 20) / 2, 6, Draw.withAlpha(Theme.TEXT_MUTED, a));
+            y = xyz(g, w, true, x0 + half + 10, y + cg, half, mx, my, a);
         } else {
-            y = xyz(g, w, false, x0, y + 9, W, mx, my, a);
+            y = xyz(g, w, false, x0, y + cg, W, mx, my, a);
         }
 
-        y += 6;
+        y += sg;
         caption(g, "FOLDER", x0, y, a);
-        y = folderChips(g, w, x0, y + 9, W, mx, my, a);
+        y = folderChips(g, w, x0, y + cg, W, mx, my, a);
 
-        y += 6;
+        y += sg;
         caption(g, "STYLE  ·  " + Waypoint.PRESETS[Math.max(0, Math.min(Waypoint.PRESETS.length - 1, w.preset))].toUpperCase(Locale.ROOT), x0, y, a);
-        y = styles(g, w, x0, y + 9, W, mx, my, a);
+        y = styles(g, w, x0, y + cg, W, mx, my, a);
 
         // color on the left, icon on the right, same line
-        y += 6;
-        float iconW = 124;
+        y += sg;
+        float iconW = L(124, 140);
         caption(g, "COLOR", x0, y, a);
         caption(g, "ICON", x0 + W - iconW, y, a);
-        float cy = y + 9;
-        colors(g, () -> w.color, v -> w.color = v, x0, cy + 4, W - iconW - 12, true, mx, my, a);
+        float cy = y + cg, iconH = L(20, 24);
+        float dot = Math.min(L(12, 16), (W - iconW - 12 - 8 * L(3, 5)) / 9);
+        colors(g, () -> w.color, v -> w.color = v, x0, cy + (iconH - dot) / 2, W - iconW - 12, true, mx, my, a);
         icon(g, w, x0 + W - iconW, cy, iconW, mx, my, a);
-        y = cy + 20;
+        y = cy + iconH;
 
         // ---- display
-        y += 6;
+        y += sg;
         Draw.rect(g, x0, y - 4, W, 1, Draw.withAlpha(0xFFFFFF, 0.06f * a));
         float cx = x0;
-        cx += chip(g, Icons.LAYERS, w.area ? "Show zone" : "Highlight block", w.block, cx, y, mx, my, a, () -> w.block = !w.block) + 4;
-        float end = y + 15;
+        float chipH = L(15, 18);
+        cx += chip(g, Icons.LAYERS, w.area ? "Show zone" : "Highlight block", w.block, cx, y, mx, my, a, () -> w.block = !w.block) + L(4, 6);
+        float end = y + chipH;
         if (w.block) {
             cx += chip(g, Icons.GLOBE, "Through walls", w.walls, cx, y, mx, my, a, () -> w.walls = !w.walls) + 10;
             float rem = x0 + W - cx;
             if (rem >= 190) { // room on the same line
                 float sw = (rem - 10) / 2;
-                slider(g, "Fill", w.fill, v -> w.fill = (float) v, cx, y + 2.5f, sw, mx, my, a);
-                slider(g, "Outline", w.outline, v -> w.outline = (float) v, cx + sw + 10, y + 2.5f, sw, mx, my, a);
+                slider(g, "Fill", w.fill, v -> w.fill = (float) v, cx, y + chipH / 2 - 5, sw, mx, my, a);
+                slider(g, "Outline", w.outline, v -> w.outline = (float) v, cx + sw + 10, y + chipH / 2 - 5, sw, mx, my, a);
             } else {
-                float sw = (W - 14) / 2, sy = y + 20;
+                float sw = (W - 14) / 2, sy = y + chipH + L(5, 10);
                 slider(g, "Fill", w.fill, v -> w.fill = (float) v, x0, sy, sw, mx, my, a);
                 slider(g, "Outline", w.outline, v -> w.outline = (float) v, x0 + sw + 14, sy, sw, mx, my, a);
                 end = sy + 10;
@@ -499,6 +507,9 @@ public class WaypointsScreen extends Screen {
         clipBottom = 1e9f;
         // only scrolls when it really does not fit
         cardMax = end + cardScroll - (by - 8) > 2 ? end + cardScroll - (by - 8) : 0;
+        // breathe into the free space (or tighten when it overflows); settles in a few frames
+        float free = (by - 8) - (end + cardScroll);
+        if (Math.abs(free) > 1.5f) breath = Draw.clamp01(breath + free / 240f);
         cardScroll = Math.max(0, Math.min(cardMax, cardScroll));
         if (cardMax > 2) {
             float vh = by - 6 - ey, barH = Math.max(12, vh * vh / (vh + cardMax));
@@ -508,20 +519,20 @@ public class WaypointsScreen extends Screen {
         // ---- actions
         Draw.rect(g, x0, by - 5, W, 1, Draw.withAlpha(0xFFFFFF, 0.06f * a));
         if (sharing) {
-            float fw = W - 3 * 52 - 12;
+            float bg = L(4, 8), bw = L(52, 62), fw = W - 3 * bw - 3 * bg;
             smallField(g, new Field("share", () -> shareTo, v -> shareTo = v, 16, false), x0, by, fw, bh, "Player name", null, mx, my, a);
-            action(g, "Send", x0 + fw + 4, by, 52, bh, true, false, mx, my, a, () -> {
+            action(g, "Send", x0 + fw + bg, by, bw, bh, true, false, mx, my, a, () -> {
                 if (!shareTo.isBlank()) WaypointShare.confirm(this, w, shareTo.trim());
             });
-            action(g, "In chat", x0 + fw + 60, by, 52, bh, false, false, mx, my, a, () -> WaypointShare.confirm(this, w, null));
-            action(g, "Close", x0 + fw + 116, by, 52, bh, false, false, mx, my, a, () -> sharing = false);
+            action(g, "In chat", x0 + fw + 2 * bg + bw, by, bw, bh, false, false, mx, my, a, () -> WaypointShare.confirm(this, w, null));
+            action(g, "Close", x0 + fw + 3 * bg + 2 * bw, by, bw, bh, false, false, mx, my, a, () -> sharing = false);
         } else if (isNew) {
-            float half = (W - 4) / 2;
+            float bg = L(4, 8), half = (W - bg) / 2;
             action(g, "Cancel", x0, by, half, bh, false, false, mx, my, a, () -> {
                 creating = null;
                 select(null);
             });
-            action(g, w.area ? "Create zone" : "Create waypoint", x0 + half + 4, by, half, bh, true, false, mx, my, a, () -> {
+            action(g, w.area ? "Create zone" : "Create waypoint", x0 + half + bg, by, half, bh, true, false, mx, my, a, () -> {
                 if (w.name.isBlank()) w.name = w.area ? "Zone" : "Waypoint";
                 Waypoints.LIST.add(w);
                 creating = null;
@@ -529,18 +540,18 @@ public class WaypointsScreen extends Screen {
                 select(w);
             });
         } else {
-            float third = (W - 8) / 3;
+            float bg = L(4, 8), third = (W - 2 * bg) / 3;
             boolean confirm = System.currentTimeMillis() < confirmDeleteUntil;
             boolean locked = in != null && in.locked;
             action(g, "Share", x0, by, third, bh, false, false, mx, my, a, () -> sharing = true);
-            action(g, "Duplicate", x0 + third + 4, by, third, bh, false, false, mx, my, a, () -> {
+            action(g, "Duplicate", x0 + third + bg, by, third, bh, false, false, mx, my, a, () -> {
                 Waypoint c = w.copy();
                 c.name = w.name + " (copy)";
                 Waypoints.LIST.add(c);
                 Waypoints.save();
                 select(c);
             });
-            action(g, locked ? "Locked" : confirm ? "Sure?" : "Delete", x0 + 2 * third + 8, by, third, bh, false, !locked, mx, my, a, () -> {
+            action(g, locked ? "Locked" : confirm ? "Sure?" : "Delete", x0 + 2 * (third + bg), by, third, bh, false, !locked, mx, my, a, () -> {
                 if (locked) return;
                 if (!confirm) {
                     confirmDeleteUntil = System.currentTimeMillis() + 2500;
@@ -573,10 +584,10 @@ public class WaypointsScreen extends Screen {
         chip(g, Icons.PIN, "New waypoint in this folder", false, x0, y, mx, my, a, this::newWaypoint);
         Draw.text(g, "Tip: drag waypoints from the list onto a folder", x0, y + 22, 0.66f, Draw.withAlpha(Theme.TEXT_MUTED, a));
 
-        float by = ey + eh - 24;
+        float bh = L(17, 21), by = ey + eh - bh - L(7, 10);
         Draw.rect(g, x0, by - 5, W, 1, Draw.withAlpha(0xFFFFFF, 0.06f * a));
         boolean confirm = System.currentTimeMillis() < confirmDeleteUntil;
-        action(g, f.locked ? "Locked" : confirm ? "Sure? Its waypoints stay, without folder" : "Delete folder", x0, by, W, 17, false, !f.locked,
+        action(g, f.locked ? "Locked" : confirm ? "Sure? Its waypoints stay, without folder" : "Delete folder", x0, by, W, bh, false, !f.locked,
                 mx, my, a, () -> {
                     if (f.locked) return;
                     if (!confirm) {
@@ -672,7 +683,7 @@ public class WaypointsScreen extends Screen {
 
     /** X / Y / Z on one line + a button that takes the current position. Returns the next y. */
     private float xyz(GuiGraphics g, Waypoint w, boolean second, float x, float y, float colW, int mx, int my, float a) {
-        float h = 16, bw = 16, fw = (colW - bw - 3 * 3) / 3;
+        float h = L(16, 20), bw = h, gp = L(3, 5), fw = (colW - bw - 3 * gp) / 3;
         String sfx = second ? "2" : "";
         smallField(g, new Field("x" + sfx, () -> String.valueOf(second ? w.x2 : w.x), v -> {
             if (second) w.x2 = parseInt(v, w.x2);
@@ -681,11 +692,11 @@ public class WaypointsScreen extends Screen {
         smallField(g, new Field("y" + sfx, () -> String.valueOf(second ? w.y2 : w.y), v -> {
             if (second) w.y2 = parseInt(v, w.y2);
             else w.y = parseInt(v, w.y);
-        }, 9, true), x + fw + 3, y, fw, h, null, "Y", mx, my, a);
+        }, 9, true), x + fw + gp, y, fw, h, null, "Y", mx, my, a);
         smallField(g, new Field("z" + sfx, () -> String.valueOf(second ? w.z2 : w.z), v -> {
             if (second) w.z2 = parseInt(v, w.z2);
             else w.z = parseInt(v, w.z);
-        }, 9, true), x + 2 * (fw + 3), y, fw, h, null, "Z", mx, my, a);
+        }, 9, true), x + 2 * (fw + gp), y, fw, h, null, "Z", mx, my, a);
         float bx = x + colW - bw;
         boolean hv = inside(mx, my, bx, y, bw, h);
         pointer |= hv;
@@ -719,32 +730,32 @@ public class WaypointsScreen extends Screen {
 
     /** Folder chips that wrap: No folder, each folder, + New. Returns the next y. */
     private float folderChips(GuiGraphics g, Waypoint w, float x, float y, float colW, int mx, int my, float a) {
-        float cx = x, cy = y, h = 14;
+        float cx = x, cy = y, h = L(14, 17), gp = L(3, 5);
         List<Waypoint.Folder> fs = Waypoints.FOLDERS;
         for (int i = -1; i <= fs.size(); i++) {
             Waypoint.Folder f = i >= 0 && i < fs.size() ? fs.get(i) : null;
             boolean add = i == fs.size();
             String label = add ? "+ New" : f == null ? "None" : f.name;
-            float cw = Draw.width(label, 0.75f) + (f != null ? 17 : 10);
+            float cw = Draw.width(label, 0.75f) + (f != null ? 17 : 10) + L(0, 6);
             if (cx + cw > x + colW && cx > x) {
                 cx = x;
-                cy += h + 3;
+                cy += h + gp;
             }
             String id = f == null ? "" : f.id;
             boolean sel = !add && id.equals(w.folder);
             boolean hv = inside(mx, my, cx, cy, cw, h);
             pointer |= hv && !sel;
-            if (sel) Draw.rrect(g, cx, cy, cw, h, 7, Draw.withAlpha(Theme.accent(), 0.95f * a));
+            if (sel) Draw.rrect(g, cx, cy, cw, h, h / 2, Draw.withAlpha(Theme.accent(), 0.95f * a));
             else {
-                Draw.rrect(g, cx, cy, cw, h, 7, Draw.withAlpha(hv ? Theme.ROW_HOVER : Theme.ROW, 0.9f * a));
-                if (add) Draw.ring(g, cx, cy, cw, h, 7, Draw.withAlpha(Theme.accent(), 0.5f * a));
+                Draw.rrect(g, cx, cy, cw, h, h / 2, Draw.withAlpha(hv ? Theme.ROW_HOVER : Theme.ROW, 0.9f * a));
+                if (add) Draw.ring(g, cx, cy, cw, h, h / 2, Draw.withAlpha(Theme.accent(), 0.5f * a));
             }
-            float tx = cx + 5;
+            float tx = cx + 5 + L(0, 3);
             if (f != null) {
-                Draw.rrect(g, cx + 5, cy + h / 2 - 2.5f, 5, 5, 2.5f, Draw.withAlpha(f.color, a));
+                Draw.rrect(g, tx, cy + h / 2 - 2.5f, 5, 5, 2.5f, Draw.withAlpha(f.color, a));
                 tx += 7;
             }
-            Draw.text(g, label, tx, cy + 3.8f, 0.75f, Draw.withAlpha(sel ? 0xFFFFFF : add ? Theme.accent() : Theme.TEXT, a));
+            Draw.text(g, label, tx, cy + h / 2 - 3.2f, 0.75f, Draw.withAlpha(sel ? 0xFFFFFF : add ? Theme.accent() : Theme.TEXT, a));
             final Waypoint.Folder ff = f;
             hit(cx, cy, cw, h, () -> {
                 if (add) {
@@ -756,7 +767,7 @@ public class WaypointsScreen extends Screen {
                 }
                 changed();
             });
-            cx += cw + 3;
+            cx += cw + gp;
         }
         return cy + h;
     }
@@ -764,17 +775,17 @@ public class WaypointsScreen extends Screen {
     /** The 5 label styles as small live thumbnails. Returns the next y. */
     private float styles(GuiGraphics g, Waypoint w, float x, float y, float colW, int mx, int my, float a) {
         int n = Waypoint.PRESETS.length;
-        float tw = (colW - (n - 1) * 3) / n, th = 24;
+        float gp = L(3, 6), tw = (colW - (n - 1) * gp) / n, th = L(24, 36);
         int saved = w.preset;
         for (int i = 0; i < n; i++) {
-            float tx = x + i * (tw + 3);
+            float tx = x + i * (tw + gp);
             boolean sel = i == saved, hv = inside(mx, my, tx, y, tw, th);
             pointer |= hv && !sel;
             Draw.rrect(g, tx, y, tw, th, 5, Draw.withAlpha(sel ? Theme.ROW_HOVER : hv ? Draw.lerpColor(Theme.ROW, Theme.ROW_HOVER, 0.5f) : Theme.ROW, 0.95f * a));
             if (sel) Draw.ring(g, tx, y, tw, th, 5, Draw.withAlpha(Theme.accent(), a));
             g.enableScissor((int) tx + 1, (int) y + 1, (int) (tx + tw - 1), (int) (y + th - 1));
             w.preset = i;
-            Waypoints.drawLabel(g, font, w, tx + tw / 2, y + th - 5, 24, 0.5f);
+            Waypoints.drawLabel(g, font, w, tx + tw / 2, y + th / 2 + 7, 24, L(0.5f, 0.6f));
             g.disableScissor();
             if (hv) tooltip(g, Waypoint.PRESETS[i], tx + tw / 2, y - 11, a);
             final int k = i;
@@ -793,10 +804,10 @@ public class WaypointsScreen extends Screen {
         // the hex field only shows when there is room for it next to full-size dots
         if (hex && colW < cols.length * 15 + 56) hex = false;
         float hexW = hex ? 50 : 0;
-        float s = Math.min(12, (colW - hexW - (hex ? 6 : 0) - (cols.length - 1) * 3) / cols.length);
+        float gp = L(3, 5), s = Math.min(L(12, 16), (colW - hexW - (hex ? 6 : 0) - (cols.length - 1) * gp) / cols.length);
         int cur = get.get() & 0xFFFFFF;
         for (int i = 0; i < cols.length; i++) {
-            float sx = x + i * (s + 3);
+            float sx = x + i * (s + gp);
             boolean hv = inside(mx, my, sx, y, s, s);
             pointer |= hv;
             if (cols[i] == cur) Draw.ring(g, sx - 2, y - 2, s + 4, s + 4, (s + 4) / 2, Draw.withAlpha(0xFFFFFF, 0.9f * a));
@@ -826,13 +837,13 @@ public class WaypointsScreen extends Screen {
 
     /** Icon slot (click: pick an item) + kind switch + "held item". Returns the next y. */
     private float icon(GuiGraphics g, Waypoint w, float x, float y, float colW, int mx, int my, float a) {
-        float s = 20;
+        float s = L(20, 24);
         boolean hv = inside(mx, my, x, y, s, s);
         pointer |= hv;
         Draw.rrect(g, x, y, s, s, 5, Draw.withAlpha(hv ? Theme.ROW_HOVER : Theme.ROW, 0.95f * a));
         Draw.ring(g, x, y, s, s, 5, Draw.withAlpha(Theme.accent(), (hv ? 0.8f : 0.3f) * a));
         ItemStack st = Waypoints.iconStack(w);
-        if (w.iconType == 1 && !st.isEmpty()) g.renderItem(st, Math.round(x + 2), Math.round(y + 2));
+        if (w.iconType == 1 && !st.isEmpty()) g.renderItem(st, Math.round(x + s / 2 - 8), Math.round(y + s / 2 - 8));
         else if (w.iconType == 2) Draw.centered(g, w.name.isEmpty() ? "?" : w.name.substring(0, 1).toUpperCase(), x + s / 2, y + 6.5f, 0.9f, Draw.withAlpha(Theme.TEXT, a));
         else Draw.rrect(g, x + s / 2 - 1.5f, y + s / 2 - 1.5f, 3, 3, 1.5f, Draw.withAlpha(Theme.TEXT_MUTED, a));
         if (hv) tooltip(g, st.isEmpty() ? "Pick an item" : st.getHoverName().getString(), x + s / 2, y - 11, a);
@@ -843,17 +854,17 @@ public class WaypointsScreen extends Screen {
         })));
         // kind: none / item / initial, as a small segmented switch
         String[] kinds = {"None", "Item", "Aa"};
-        float kx = x + s + 6, kh = 14, ky = y + (s - kh) / 2;
+        float kx = x + s + L(6, 8), kh = L(14, 17), ky = y + (s - kh) / 2;
         float kw = 0;
         for (String k : kinds) kw += Draw.width(k, 0.72f) + 10;
-        Draw.rrect(g, kx, ky, kw + 2, kh, 7, Draw.withAlpha(Theme.ROW, 0.9f * a));
+        Draw.rrect(g, kx, ky, kw + 2, kh, kh / 2, Draw.withAlpha(Theme.ROW, 0.9f * a));
         float cx = kx + 1;
         for (int i = 0; i < kinds.length; i++) {
             float cw = Draw.width(kinds[i], 0.72f) + 10;
             boolean sel = w.iconType == i, h2 = inside(mx, my, cx, ky, cw, kh);
             pointer |= h2 && !sel;
-            if (sel) Draw.rrect(g, cx, ky + 1, cw, kh - 2, 6, Draw.withAlpha(Theme.accent(), 0.95f * a));
-            Draw.text(g, kinds[i], cx + 5, ky + 3.8f, 0.72f, Draw.withAlpha(sel ? 0xFFFFFF : Theme.TEXT_DIM, a));
+            if (sel) Draw.rrect(g, cx, ky + 1, cw, kh - 2, (kh - 2) / 2, Draw.withAlpha(Theme.accent(), 0.95f * a));
+            Draw.text(g, kinds[i], cx + 5, ky + kh / 2 - 3.1f, 0.72f, Draw.withAlpha(sel ? 0xFFFFFF : Theme.TEXT_DIM, a));
             final int k = i;
             hit(cx, ky, cw, kh, () -> {
                 w.iconType = k;
@@ -862,7 +873,7 @@ public class WaypointsScreen extends Screen {
             cx += cw;
         }
         // take the item in hand
-        float hx = kx + kw + 8, hw = 16;
+        float hx = kx + kw + L(8, 10), hw = kh + 2;
         if (hx + hw <= x + colW) {
             boolean h3 = inside(mx, my, hx, ky - 1, hw, kh + 2);
             pointer |= h3;
@@ -883,13 +894,14 @@ public class WaypointsScreen extends Screen {
 
     /** Toggle chip: icon + label, filled when on. Returns its width. */
     private float chip(GuiGraphics g, String icon, String label, boolean on, float x, float y, int mx, int my, float a, Runnable toggle) {
-        float h = 15, w = Draw.width(label, 0.75f) + 22;
+        float h = L(15, 18), w = Draw.width(label, 0.75f) + L(22, 28);
         boolean hv = inside(mx, my, x, y, w, h);
         pointer |= hv;
-        Draw.rrect(g, x, y, w, h, 7.5f, Draw.withAlpha(on ? Theme.accent() : hv ? Theme.ROW_HOVER : Theme.ROW, (on ? 0.9f : 0.9f) * a));
-        if (!on) Draw.ring(g, x, y, w, h, 7.5f, Draw.withAlpha(0xFFFFFF, 0.1f * a));
-        Draw.icon(g, icon, x + 9, y + h / 2, 7, Draw.withAlpha(on ? 0xFFFFFF : Theme.TEXT_DIM, a));
-        Draw.text(g, label, x + 16, y + 4.3f, 0.75f, Draw.withAlpha(on ? 0xFFFFFF : Theme.TEXT_DIM, a));
+        Draw.rrect(g, x, y, w, h, h / 2, Draw.withAlpha(on ? Theme.accent() : hv ? Theme.ROW_HOVER : Theme.ROW, 0.9f * a));
+        if (!on) Draw.ring(g, x, y, w, h, h / 2, Draw.withAlpha(0xFFFFFF, 0.1f * a));
+        float ix = x + L(9, 11);
+        Draw.icon(g, icon, ix, y + h / 2, 7, Draw.withAlpha(on ? 0xFFFFFF : Theme.TEXT_DIM, a));
+        Draw.text(g, label, ix + 7, y + h / 2 - 3.2f, 0.75f, Draw.withAlpha(on ? 0xFFFFFF : Theme.TEXT_DIM, a));
         hit(x, y, w, h, () -> {
             toggle.run();
             changed();
