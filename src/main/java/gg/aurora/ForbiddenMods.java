@@ -4,6 +4,7 @@ import gg.aurora.ui.Icons;
 import gg.aurora.ui.Toasts;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
+import net.fabricmc.loader.api.metadata.ModDependency;
 import net.fabricmc.loader.api.metadata.ModOrigin;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.ConfirmScreen;
@@ -16,6 +17,8 @@ import net.minecraft.network.chat.Component;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -69,29 +72,65 @@ public final class ForbiddenMods {
 
     /** Mods of this instance whose id or name appears as a whole word in the message. */
     private static List<Target> find(String text) {
-        Path mods = ModManager.modsFolder().toAbsolutePath().normalize();
         Map<Path, Target> out = new LinkedHashMap<>();
         for (ModContainer m : FabricLoader.getInstance().getAllMods()) {
             String id = m.getMetadata().getId();
             if (KEEP.contains(id) || id.startsWith("fabric")) continue;
             if (!named(text, id) && !named(text, m.getMetadata().getName())) continue;
-            // a mod bundled inside another jar: the jar that holds it is the one to turn off
-            ModContainer top = m;
-            while (top.getContainingMod().isPresent()) top = top.getContainingMod().get();
-            if (KEEP.contains(top.getMetadata().getId())) continue;
-            if (top.getOrigin().getKind() != ModOrigin.Kind.PATH) continue;
-            for (Path p : top.getOrigin().getPaths()) {
-                Path abs = p.toAbsolutePath().normalize();
-                if (mods.equals(abs.getParent()) && abs.toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
-                    out.putIfAbsent(abs, new Target(top.getMetadata().getId(), top.getMetadata().getName(), abs));
-            }
+            Target t = jarOf(m);
+            if (t != null) out.putIfAbsent(t.jar(), t);
         }
+        if (!out.isEmpty()) addDependents(out);
         // mods started later by the hot mods runtime are not in Fabric's list
         for (ModManager.Installed i : ModManager.installed) {
             if (!i.live || !i.enabled || i.self() || i.modId == null || KEEP.contains(i.modId)) continue;
             if (named(text, i.modId) || named(text, i.name)) out.putIfAbsent(i.path.toAbsolutePath().normalize(), new Target(i.modId, i.name, i.path));
         }
         return new ArrayList<>(out.values());
+    }
+
+    /** The jar in the mods folder that holds this mod (a bundled mod: the jar it is bundled in), or null. */
+    private static Target jarOf(ModContainer m) {
+        ModContainer top = m;
+        while (top.getContainingMod().isPresent()) top = top.getContainingMod().get();
+        if (KEEP.contains(top.getMetadata().getId()) || top.getOrigin().getKind() != ModOrigin.Kind.PATH) return null;
+        Path mods = ModManager.modsFolder().toAbsolutePath().normalize();
+        for (Path p : top.getOrigin().getPaths()) {
+            Path abs = p.toAbsolutePath().normalize();
+            if (mods.equals(abs.getParent()) && abs.toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
+                return new Target(top.getMetadata().getId(), top.getMetadata().getName(), abs);
+        }
+        return null;
+    }
+
+    /**
+     * Mods that require a mod being turned off go with it (e.g. an add-on of ViaFabricPlus): left alone, Fabric
+     * would refuse to start at the next launch because their dependency is missing.
+     */
+    private static void addDependents(Map<Path, Target> out) {
+        Collection<ModContainer> all = FabricLoader.getInstance().getAllMods();
+        boolean grew = true;
+        while (grew) {
+            grew = false;
+            Set<String> gone = new HashSet<>();
+            for (ModContainer m : all) {
+                Target t = jarOf(m);
+                if (t == null || !out.containsKey(t.jar())) continue;
+                gone.add(m.getMetadata().getId());
+                gone.addAll(m.getMetadata().getProvides());
+            }
+            for (ModContainer m : all) {
+                Target t = jarOf(m);
+                if (t == null || out.containsKey(t.jar())) continue;
+                for (ModDependency d : m.getMetadata().getDependencies()) {
+                    if (d.getKind() == ModDependency.Kind.DEPENDS && gone.contains(d.getModId())) {
+                        out.put(t.jar(), t);
+                        grew = true;
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     private static boolean named(String text, String word) {
