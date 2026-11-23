@@ -37,6 +37,15 @@ public class PingWheelScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mx, int my, float pt) {
+        Draw.squareOn();
+        try {
+            render0(g, mx, my);
+        } finally {
+            Draw.squareOff();
+        }
+    }
+
+    private void render0(GuiGraphics g, int mx, int my) {
         long nowNs = System.nanoTime();
         float dt = Math.min(0.1f, (nowNs - last) / 1e9f);
         last = nowNs;

@@ -509,11 +509,11 @@ public final class Pings {
         if (vc != null && consumers instanceof MultiBufferSource.BufferSource bs) bs.endBatch();
     }
 
+    /** Square frame on the ground (axis aligned, like a block outline). */
     private static void ring(VertexConsumer vc, Matrix4f m, float x, float y, float z, float r, float th, int col) {
-        int n = 32;
-        for (int i = 0; i < n; i++) {
-            double a0 = i * Math.PI * 2 / n, a1 = (i + 1) * Math.PI * 2 / n;
-            float c0 = (float) Math.cos(a0), s0 = (float) Math.sin(a0), c1 = (float) Math.cos(a1), s1 = (float) Math.sin(a1);
+        float[][] k = {{1, 1}, {-1, 1}, {-1, -1}, {1, -1}};
+        for (int i = 0; i < 4; i++) {
+            float c0 = k[i][0], s0 = k[i][1], c1 = k[(i + 1) % 4][0], s1 = k[(i + 1) % 4][1];
             float ri = r - th, ro = r + th;
             // both windings so the ring shows from above and below
             vc.addVertex(m, x + c0 * ri, y, z + s0 * ri).setColor(col).setLight(0xF000F0);
@@ -535,6 +535,16 @@ public final class Pings {
     // ===================================================================== HUD marker
 
     public static void renderHud(GuiGraphics g, DeltaTracker delta) {
+        // square markers, like the waypoint labels
+        Draw.squareOn();
+        try {
+            renderHud0(g, delta);
+        } finally {
+            Draw.squareOff();
+        }
+    }
+
+    private static void renderHud0(GuiGraphics g, DeltaTracker delta) {
         Minecraft mc = Minecraft.getInstance();
         for (Ping p : LIST) p.seen = false;
         if (!Settings.pingEnabled || LIST.isEmpty() || mc.level == null || mc.player == null || mc.options.hideGui) return;

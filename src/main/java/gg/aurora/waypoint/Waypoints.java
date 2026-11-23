@@ -499,6 +499,15 @@ public final class Waypoints {
 
     /** Small round marker with a chevron pointing at angle (radians, 0 = right). Shared with pings. */
     public static void edgeArrow(GuiGraphics g, float cx, float cy, float angle, int rgb, float a) {
+        Draw.squareOn();
+        try {
+            edgeArrow0(g, cx, cy, angle, rgb, a);
+        } finally {
+            Draw.squareOff();
+        }
+    }
+
+    private static void edgeArrow0(GuiGraphics g, float cx, float cy, float angle, int rgb, float a) {
         g.pose().pushMatrix();
         g.pose().translate(cx, cy);
         g.pose().rotate(angle - (float) (Math.PI / 2));

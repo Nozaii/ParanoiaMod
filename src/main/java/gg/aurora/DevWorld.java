@@ -63,12 +63,14 @@ public final class DevWorld {
             }
             if (tick == 40) shot(mc, "wpui_world");
             if (tick == 44) { var sc = new gg.aurora.waypoint.WaypointsScreen(null, null); mc.setScreen(sc);
-                sc.debugSelect(gg.aurora.waypoint.Waypoints.LIST.stream().filter(w -> w.name.equals("Dev Home")).findFirst().orElse(null)); sc.debugTab(0); }
+                sc.debugSelect(gg.aurora.waypoint.Waypoints.LIST.stream().filter(w -> w.name.equals("Dev Home")).findFirst().orElse(null)); }
             if (tick == 60) shot(mc, "wpui_general");
-            if (tick == 62) ((gg.aurora.waypoint.WaypointsScreen) mc.screen).debugTab(1);
-            if (tick == 76) shot(mc, "wpui_look");
-            if (tick == 78) ((gg.aurora.waypoint.WaypointsScreen) mc.screen).debugTab(2);
-            if (tick == 90) shot(mc, "wpui_highlight");
+            if (tick == 62) { gg.aurora.waypoint.Waypoint z = gg.aurora.waypoint.Waypoints.create(mc); z.name = "Dev Zone"; z.area = true;
+                z.x2 = z.x + 11; z.y2 = z.y + 4; z.z2 = z.z + 8; z.folder = gg.aurora.waypoint.Waypoints.FOLDERS.get(gg.aurora.waypoint.Waypoints.FOLDERS.size() - 1).id;
+                gg.aurora.waypoint.Waypoints.LIST.add(z); ((gg.aurora.waypoint.WaypointsScreen) mc.screen).debugSelect(z); }
+            if (tick == 76) shot(mc, "wpui_zone");
+            if (tick == 78) ((gg.aurora.waypoint.WaypointsScreen) mc.screen).debugSelect(gg.aurora.waypoint.Waypoints.LIST.stream().filter(w -> w.name.equals("Dev Portal")).findFirst().orElse(null));
+            if (tick == 90) shot(mc, "wpui_nofolder");
             if (tick == 92) ((gg.aurora.waypoint.WaypointsScreen) mc.screen).debugSelect(gg.aurora.waypoint.Waypoints.FOLDERS.stream().filter(f -> f.name.equals("Dev Base")).findFirst().orElse(null));
             if (tick == 106) shot(mc, "wpui_folder");
             if (tick == 110) { mc.setScreen(null); gg.aurora.waypoint.Waypoints.LIST.removeIf(w -> w.name.startsWith("Dev "));
