@@ -73,7 +73,10 @@ public final class DevWorld {
             if (tick == 90) shot(mc, "wpui_nofolder");
             if (tick == 92) ((gg.aurora.waypoint.WaypointsScreen) mc.screen).debugSelect(gg.aurora.waypoint.Waypoints.FOLDERS.stream().filter(f -> f.name.equals("Dev Base")).findFirst().orElse(null));
             if (tick == 106) shot(mc, "wpui_folder");
-            if (tick == 110) { mc.setScreen(null); gg.aurora.waypoint.Waypoints.LIST.removeIf(w -> w.name.startsWith("Dev "));
+            if (tick == 108) ((gg.aurora.waypoint.WaypointsScreen) mc.screen).debugMulti(gg.aurora.waypoint.Waypoints.LIST.stream()
+                    .filter(w -> w.name.equals("Dev Home") || w.name.equals("Dev Diamonds") || w.name.equals("Dev Portal")).toList());
+            if (tick == 122) shot(mc, "wpui_multi");
+            if (tick == 126) { mc.setScreen(null); gg.aurora.waypoint.Waypoints.LIST.removeIf(w -> w.name.startsWith("Dev "));
                 gg.aurora.waypoint.Waypoints.FOLDERS.removeIf(f -> f.name.startsWith("Dev ")); gg.aurora.waypoint.Waypoints.save(); mc.stop(); }
             return;
         }
