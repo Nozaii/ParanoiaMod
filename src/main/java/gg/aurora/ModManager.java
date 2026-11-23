@@ -225,6 +225,8 @@ public final class ModManager {
     /** A restart is needed for something the queue does not hold (a jar that could not load live). */
     private static volatile boolean changed;
     private static volatile boolean relaunch;
+    /** Server joined right after the relaunch, or null. */
+    private static volatile String joinAfter;
 
     public static boolean restartNeeded() {
         synchronized (queued) {
@@ -1157,6 +1159,15 @@ public final class ModManager {
         }
     }
 
+    /** A loaded jar turned off for the next launch (a server forbids it); shown as pending in the list. */
+    static void disableAtRestart(Path jar, Path off) {
+        synchronized (queued) {
+            if (queued.stream().anyMatch(op -> op.owner().equals(jar))) return;
+        }
+        queue(jar, jar, off);
+        for (Installed i : installed) if (i.path.toAbsolutePath().normalize().equals(jar)) i.pending = "Turns off at restart";
+    }
+
     public static void toast(String icon, String title, String body) {
         Minecraft.getInstance().execute(() -> Toasts.push(icon, title, body, false));
     }
@@ -1167,6 +1178,12 @@ public final class ModManager {
     public static void restart() {
         relaunch = true;
         Minecraft.getInstance().stop();
+    }
+
+    /** Same, then joins this server once the game is back. */
+    static void restartAndJoin(String ip) {
+        joinAfter = ip;
+        restart();
     }
 
     /** Called while the game closes: hands queued moves (and the relaunch) to {@link ModSwap}. */
@@ -1219,7 +1236,16 @@ public final class ModManager {
             cmd.add(System.getProperty("java.class.path"));
             cmd.add(main);
         }
-        cmd.addAll(Arrays.asList(FabricLoader.getInstance().getLaunchArguments(false)));
+        List<String> args = new ArrayList<>(Arrays.asList(FabricLoader.getInstance().getLaunchArguments(false)));
+        if (joinAfter != null) {
+            // one quick play target only: the game refuses the option twice
+            for (int i = args.size() - 2; i >= 0; i--) {
+                if (args.get(i).startsWith("--quickPlay")) args.subList(i, i + 2).clear();
+            }
+            args.add("--quickPlayMultiplayer");
+            args.add(joinAfter);
+        }
+        cmd.addAll(args);
         return cmd;
     }
 }
