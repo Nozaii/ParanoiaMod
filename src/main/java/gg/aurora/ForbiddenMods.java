@@ -29,7 +29,8 @@ import java.util.regex.Pattern;
 /**
  * Kicked by a server because of a mod: the mods named in the kick message are turned off, then the game joins the
  * server again. With the hot mods runtime they stop right away; otherwise their jar is disabled and the game offers
- * to restart straight back onto the server (a mod Fabric loaded at startup cannot be unloaded from a running game).
+ * to close (a mod Fabric loaded at startup cannot be unloaded from a running game). It is not started again from
+ * here: the player starts it from their launcher, which a game relaunched on its own would bypass.
  */
 public final class ForbiddenMods {
     private ForbiddenMods() {}
@@ -163,12 +164,12 @@ public final class ForbiddenMods {
                 return;
             }
             mc.setScreen(new ConfirmScreen(ok -> {
-                if (ok) ModManager.restartAndJoin(server.ip);
+                if (ok) mc.stop(); // the jars are renamed once the game has closed (ModManager.applyOnExit)
                 else mc.setScreen(parent);
             }, Component.literal("Forbidden on " + server.name),
                     Component.literal(String.join(", ", atRestart) + " cannot stop while the game runs. It is disabled from"
-                            + " the next launch: restart now and join " + server.name + " again?"),
-                    Component.literal("Restart and join"), Component.literal("Later")));
+                            + " the next launch: close the game now, then start it again from your launcher."),
+                    Component.literal("Close the game"), Component.literal("Later")));
         });
     }
 
