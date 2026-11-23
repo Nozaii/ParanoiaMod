@@ -83,6 +83,19 @@ public class WaypointsScreen extends Screen {
     }
     private float clipTop = -1e9f, clipBottom = 1e9f;
 
+    // ---- multi-selection: long press + sweep, Ctrl / Shift + click
+    private final java.util.LinkedHashSet<Waypoint> multi = new java.util.LinkedHashSet<>();
+    private java.util.Set<Waypoint> sweepBase = new java.util.HashSet<>();
+    private Waypoint pressWp, lastClicked;
+    /** Checked row pressed in selection mode: unchecked on release, unless it was dragged or swept. */
+    private Waypoint pendingToggle;
+    private long pressAt;
+    private boolean sweeping;
+    private int sweepAnchor = -1;
+    private static final long HOLD_MS = 350;
+    /** Group editing: the card edits this stand-in, changes are copied to every selected waypoint. */
+    private Waypoint proxy, snap;
+
     private record Line(Object item, int depth, float y, float h) {}
 
     private final List<Line> lines = new ArrayList<>();
@@ -117,10 +130,103 @@ public class WaypointsScreen extends Screen {
         focus = null;
         sharing = false;
         cardScroll = 0;
+        multi.clear();
     }
 
     private void changed() {
+        if (!multi.isEmpty()) {
+            syncBulk();
+            return;
+        }
         if (creating == null || selected != creating) Waypoints.save();
+    }
+
+    /** Copies what was changed on the group card to every selected waypoint. */
+    private void syncBulk() {
+        if (proxy == null || snap == null || multi.isEmpty()) return;
+        boolean any = false;
+        for (Waypoint w : multi) {
+            if (!proxy.folder.equals(snap.folder)) w.folder = proxy.folder;
+            if (proxy.preset != snap.preset && proxy.preset >= 0) w.preset = proxy.preset;
+            if (proxy.color != snap.color && proxy.color >= 0) w.color = proxy.color & 0xFFFFFF;
+            if (proxy.iconType != snap.iconType && proxy.iconType >= 0) w.iconType = proxy.iconType;
+            if (!proxy.icon.equals(snap.icon)) w.icon = proxy.icon;
+            if (proxy.visible != snap.visible) w.visible = proxy.visible;
+            if (proxy.block != snap.block) w.block = proxy.block;
+            if (proxy.walls != snap.walls) w.walls = proxy.walls;
+            if (proxy.fill != snap.fill) w.fill = proxy.fill;
+            if (proxy.outline != snap.outline) w.outline = proxy.outline;
+            any = true;
+        }
+        snap = proxy.copy();
+        if (any) Waypoints.save();
+    }
+
+    /** Waypoints of the list in display order (only what the search / filter shows). */
+    private List<Waypoint> shownWaypoints() {
+        List<Waypoint> r = new ArrayList<>();
+        for (Line l : lines) if (l.item() instanceof Waypoint w) r.add(w);
+        return r;
+    }
+
+    private void addRange(Waypoint from, Waypoint to) {
+        List<Waypoint> ws = shownWaypoints();
+        int i = ws.indexOf(from), j = ws.indexOf(to);
+        if (i < 0 || j < 0) {
+            multi.add(to);
+            return;
+        }
+        for (int k = Math.min(i, j); k <= Math.max(i, j); k++) multi.add(ws.get(k));
+    }
+
+    private static boolean keyDown(int key) {
+        return com.mojang.blaze3d.platform.InputConstants.isKeyDown(net.minecraft.client.Minecraft.getInstance().getWindow(), key);
+    }
+
+    private static boolean ctrl() {
+        return keyDown(GLFW.GLFW_KEY_LEFT_CONTROL) || keyDown(GLFW.GLFW_KEY_RIGHT_CONTROL);
+    }
+
+    private static boolean shift() {
+        return keyDown(GLFW.GLFW_KEY_LEFT_SHIFT) || keyDown(GLFW.GLFW_KEY_RIGHT_SHIFT);
+    }
+
+    /** Line under the mouse in the list, or -1. */
+    private int lineAt(double my) {
+        float listY = ly + 43;
+        for (int i = 0; i < lines.size(); i++) {
+            float ry = listY + lines.get(i).y() - scroll;
+            if (my >= ry && my < ry + lines.get(i).h()) return i;
+        }
+        return -1;
+    }
+
+    /** Long press reached: selection mode, the sweep starts on this waypoint. */
+    private void startSweep() {
+        sweeping = true;
+        drag = null;
+        if (multi.isEmpty()) {
+            creating = null;
+            focus = null;
+            sharing = false;
+        }
+        multi.add(pressWp);
+        sweepBase = new java.util.HashSet<>(multi);
+        List<Waypoint> ws = shownWaypoints();
+        sweepAnchor = ws.indexOf(pressWp);
+        lastClicked = pressWp;
+        click(1.45f);
+    }
+
+    private void sweepTo(double my) {
+        int li = lineAt(my);
+        if (li < 0 || !(lines.get(li).item() instanceof Waypoint to)) return;
+        List<Waypoint> ws = shownWaypoints();
+        int j = ws.indexOf(to);
+        if (sweepAnchor < 0 || j < 0) return;
+        multi.clear();
+        multi.addAll(sweepBase);
+        for (int k = Math.min(sweepAnchor, j); k <= Math.max(sweepAnchor, j); k++) multi.add(ws.get(k));
     }
 
     private static int parseInt(String s, int def) {
@@ -232,6 +338,14 @@ public class WaypointsScreen extends Screen {
     }
 
     private void renderList(GuiGraphics g, int mx, int my, float a, long now) {
+        if (pressWp != null && !dragging && !sweeping && System.currentTimeMillis() - pressAt >= HOLD_MS) startSweep();
+        // sweeping near the edges of the list scrolls it
+        if (sweeping) {
+            float top = ly + 43, bottom = ly + lh - 26;
+            if (my < top + 10) scrollTarget -= 4;
+            else if (my > bottom - 10) scrollTarget += 4;
+            sweepTo(Math.max(top + 1, Math.min(bottom - 1, my)));
+        }
         lx = wx + 10;
         ly = wy + 30;
         lw = Math.max(165, ww * 0.38f);
@@ -307,7 +421,8 @@ public class WaypointsScreen extends Screen {
 
     private void drawLine(GuiGraphics g, Line l, float x, float y, float w, int mx, int my, float a, boolean inList) {
         float h = l.h();
-        boolean sel = l.item() == selected;
+        boolean picked = l.item() instanceof Waypoint pw && multi.contains(pw);
+        boolean sel = multi.isEmpty() ? l.item() == selected : picked;
         boolean hv = inList && inside(mx, my, x, y, w, h);
         pointer |= hv && !dragging;
         boolean drop = dragging && hv && dropFolder(l) != null;
@@ -319,6 +434,11 @@ public class WaypointsScreen extends Screen {
             if (sel) Draw.ring(g, x, y + 1, w, h - 2, 5, Draw.withAlpha(Theme.accent(), 0.6f * a));
         }
         float ix = x + 4 + l.depth() * 10;
+        // long press in progress: a bar fills under the row
+        if (l.item() == pressWp && !sweeping && !dragging) {
+            float t = Draw.clamp01((System.currentTimeMillis() - pressAt - 80) / (float) (HOLD_MS - 80));
+            if (t > 0) Draw.rrect(g, x + 2, y + h - 3, (w - 4) * t, 1.5f, 0.75f, Draw.withAlpha(Theme.accent(), a));
+        }
         float eyeX = x + w - 10;
         if (l.item() instanceof Waypoint.Folder f) {
             // tree guide for the open folder
@@ -339,6 +459,12 @@ public class WaypointsScreen extends Screen {
             Draw.icon(g, Icons.LIST, ix + 3, y + h / 2, 7, Draw.withAlpha(Theme.TEXT_MUTED, a));
             Draw.text(g, "No folder", ix + 12, y + 5.5f, 0.8f, Draw.withAlpha(Theme.TEXT_DIM, a));
         } else if (l.item() instanceof Waypoint wp) {
+            if (!multi.isEmpty()) { // selection mode: a checkbox on every row
+                Draw.rrect(g, ix, y + h / 2 - 4.5f, 9, 9, 2.5f, Draw.withAlpha(picked ? Theme.accent() : Theme.ROW_HOVER, a));
+                if (!picked) Draw.ring(g, ix, y + h / 2 - 4.5f, 9, 9, 2.5f, Draw.withAlpha(0xFFFFFF, 0.35f * a));
+                else Draw.icon(g, Icons.CHECK, ix + 4.5f, y + h / 2, 7, Draw.withAlpha(0xFFFFFF, a));
+                ix += 13;
+            }
             Draw.rrect(g, ix, y + 4, 2, h - 8, 1, Draw.withAlpha(wp.color, a));
             ItemStack s = wp.iconType == 1 ? Waypoints.iconStack(wp) : ItemStack.EMPTY;
             float tx = ix + 6;
@@ -384,6 +510,14 @@ public class WaypointsScreen extends Screen {
         eh = lh;
         fieldOrder.clear();
         Draw.rrect(g, ex, ey, ew, eh, 8, Draw.withAlpha(0x000000, 0.22f * a));
+        multi.removeIf(w -> !Waypoints.LIST.contains(w));
+        if (!multi.isEmpty()) {
+            g.enableScissor((int) ex, (int) ey, (int) (ex + ew), (int) (ey + eh));
+            bulkCard(g, mx, my, a);
+            g.disableScissor();
+            return;
+        }
+        proxy = null;
         if (selected == null) {
             float cy = ey + eh / 2 - 30;
             Draw.icon(g, Icons.PIN, ex + ew / 2, cy, 22, Draw.withAlpha(Theme.accent(), 0.8f * a));
@@ -562,6 +696,131 @@ public class WaypointsScreen extends Screen {
                 select(null);
             });
         }
+    }
+
+    /** Group card: same places as the waypoint card, every change applies to the whole selection. */
+    private void bulkCard(GuiGraphics g, int mx, int my, float a) {
+        List<Waypoint> ws = new ArrayList<>(multi);
+        Waypoint first = ws.get(0);
+        // stand-in: common values, or "mixed" markers so that any pick applies to all
+        proxy = first.copy();
+        proxy.name = first.name;
+        boolean allVisible = true, allBlock = true, allWalls = true;
+        for (Waypoint w : ws) {
+            if (!w.folder.equals(first.folder)) proxy.folder = "\u0000";
+            if (w.preset != first.preset) proxy.preset = -1;
+            if (w.color != first.color) proxy.color = -1;
+            if (w.iconType != first.iconType) proxy.iconType = -1;
+            allVisible &= w.visible;
+            allBlock &= w.block;
+            allWalls &= w.walls;
+        }
+        proxy.visible = allVisible;
+        proxy.block = allBlock;
+        proxy.walls = allWalls;
+        snap = proxy.copy();
+        Waypoint w = proxy;
+
+        float x0 = ex + PAD, top = ey + PAD - cardScroll, W = ew - 2 * PAD;
+        float bh = L(17, 21), by = ey + eh - bh - L(7, 10), sg = L(6, 16), cg = L(9, 12);
+        g.enableScissor((int) ex, (int) ey, (int) (ex + ew), (int) (by - 6));
+        clipTop = ey;
+        clipBottom = by - 6;
+
+        // ---- top: count + how to select, select all / clear on the right
+        int n = ws.size();
+        Draw.text(g, n + (n == 1 ? " waypoint selected" : " waypoints selected"), x0, top + 2.5f, 1.15f, Draw.withAlpha(Theme.TEXT, a));
+        Draw.text(g, "Hold and drag in the list  ·  Ctrl / Shift + click  ·  Esc to finish", x0, top + 20.5f + L(0, 3), 0.68f,
+                Draw.withAlpha(Theme.TEXT_MUTED, a));
+        float lx2 = x0 + W - Draw.width("Clear", 0.65f);
+        link(g, "Clear", lx2, top + 4, mx, my, a, () -> {
+            multi.clear();
+            selected = null;
+        });
+        float sw0 = Draw.width("Select all", 0.65f);
+        link(g, "Select all", lx2 - 12 - sw0, top + 4, mx, my, a, () -> multi.addAll(shownWaypoints()));
+
+        float y = top + L(28, 38) + sg;
+        Draw.rect(g, x0, y - 4, W, 1, Draw.withAlpha(0xFFFFFF, 0.06f * a));
+        caption(g, "MOVE TO FOLDER", x0, y, a);
+        y = folderChips(g, w, x0, y + cg, W, mx, my, a);
+
+        y += sg;
+        caption(g, "STYLE" + (w.preset >= 0 ? "  ·  " + Waypoint.PRESETS[Math.min(Waypoint.PRESETS.length - 1, w.preset)].toUpperCase(Locale.ROOT) : "  ·  MIXED"), x0, y, a);
+        int savedColor = w.color;
+        if (w.color < 0) w.color = first.color; // thumbnails need a real color
+        y = styles(g, w, x0, y + cg, W, mx, my, a);
+        w.color = savedColor;
+        snap.color = savedColor;
+
+        y += sg;
+        float iconW = L(124, 140);
+        caption(g, "COLOR", x0, y, a);
+        caption(g, "ICON", x0 + W - iconW, y, a);
+        float cy = y + cg, iconH = L(20, 24);
+        float dot = Math.min(L(12, 16), (W - iconW - 12 - 8 * L(3, 5)) / 9);
+        colors(g, () -> w.color, v -> w.color = v, x0, cy + (iconH - dot) / 2, W - iconW - 12, false, mx, my, a);
+        icon(g, w, x0 + W - iconW, cy, iconW, mx, my, a);
+        y = cy + iconH;
+
+        y += sg;
+        Draw.rect(g, x0, y - 4, W, 1, Draw.withAlpha(0xFFFFFF, 0.06f * a));
+        float chipH = L(15, 18), cx = x0;
+        cx += chip(g, Icons.EYE, "Shown", w.visible, cx, y, mx, my, a, () -> w.visible = !w.visible) + L(4, 6);
+        cx += chip(g, Icons.LAYERS, "Highlight", w.block, cx, y, mx, my, a, () -> w.block = !w.block) + L(4, 6);
+        chip(g, Icons.GLOBE, "Through walls", w.walls, cx, y, mx, my, a, () -> w.walls = !w.walls);
+        float end = y + chipH;
+        float ssw = (W - 14) / 2, sy = y + chipH + L(5, 10);
+        slider(g, "Fill", w.fill, v -> w.fill = (float) v, x0, sy, ssw, mx, my, a);
+        slider(g, "Outline", w.outline, v -> w.outline = (float) v, x0 + ssw + 14, sy, ssw, mx, my, a);
+        end = sy + 10;
+
+        g.disableScissor();
+        clipTop = -1e9f;
+        clipBottom = 1e9f;
+        cardMax = end + cardScroll - (by - 8) > 2 ? end + cardScroll - (by - 8) : 0;
+        cardScroll = Math.max(0, Math.min(cardMax, cardScroll));
+        float free = (by - 8) - (end + cardScroll);
+        if (Math.abs(free) > 1.5f) breath = Draw.clamp01(breath + free / 240f);
+
+        // ---- actions on the whole group
+        Draw.rect(g, x0, by - 5, W, 1, Draw.withAlpha(0xFFFFFF, 0.06f * a));
+        float bg = L(4, 8), half = (W - bg) / 2;
+        boolean confirm = System.currentTimeMillis() < confirmDeleteUntil;
+        int locked = 0;
+        for (Waypoint q : ws) {
+            Waypoint.Folder f = Waypoints.folder(q.folder);
+            if (f != null && f.locked) locked++;
+        }
+        int deletable = n - locked;
+        action(g, "Duplicate " + n, x0, by, half, bh, false, false, mx, my, a, () -> {
+            List<Waypoint> copies = new ArrayList<>();
+            for (Waypoint q : ws) {
+                Waypoint c = q.copy();
+                c.name = q.name + " (copy)";
+                Waypoints.LIST.add(c);
+                copies.add(c);
+            }
+            Waypoints.save();
+            multi.clear();
+            multi.addAll(copies);
+        });
+        String del = deletable == 0 ? "Locked" : confirm ? "Sure? Delete " + deletable : "Delete " + deletable + (locked > 0 ? " (" + locked + " locked)" : "");
+        action(g, del, x0 + half + bg, by, half, bh, false, deletable > 0, mx, my, a, () -> {
+            if (deletable == 0) return;
+            if (!confirm) {
+                confirmDeleteUntil = System.currentTimeMillis() + 2500;
+                return;
+            }
+            for (Waypoint q : ws) {
+                Waypoint.Folder f = Waypoints.folder(q.folder);
+                if (f == null || !f.locked) Waypoints.LIST.remove(q);
+            }
+            Waypoints.save();
+            confirmDeleteUntil = 0;
+            multi.clear();
+            selected = null;
+        });
     }
 
     private void folderCard(GuiGraphics g, Waypoint.Folder f, int mx, int my, float a) {
@@ -805,7 +1064,7 @@ public class WaypointsScreen extends Screen {
         if (hex && colW < cols.length * 15 + 56) hex = false;
         float hexW = hex ? 50 : 0;
         float gp = L(3, 5), s = Math.min(L(12, 16), (colW - hexW - (hex ? 6 : 0) - (cols.length - 1) * gp) / cols.length);
-        int cur = get.get() & 0xFFFFFF;
+        int cur = get.get() < 0 ? -1 : get.get() & 0xFFFFFF;
         for (int i = 0; i < cols.length; i++) {
             float sx = x + i * (s + gp);
             boolean hv = inside(mx, my, sx, y, s, s);
@@ -821,7 +1080,7 @@ public class WaypointsScreen extends Screen {
         }
         if (hex) {
             float hx = x + colW - hexW;
-            smallField(g, new Field("hex", () -> String.format(Locale.ROOT, "%06X", get.get() & 0xFFFFFF), v -> {
+            smallField(g, new Field("hex", () -> get.get() < 0 ? "" : String.format(Locale.ROOT, "%06X", get.get() & 0xFFFFFF), v -> {
                 String t = v.replace("#", "").trim();
                 if (t.length() == 6) {
                     try {
@@ -950,6 +1209,12 @@ public class WaypointsScreen extends Screen {
         hit(x, y, w, h, run);
     }
 
+    /** Dev: selects several waypoints at once. */
+    public void debugMulti(java.util.Collection<Waypoint> ws) {
+        select(null);
+        multi.addAll(ws);
+    }
+
     /** Dev: selects an item. */
     public void debugSelect(Object o) {
         creating = null;
@@ -1000,6 +1265,7 @@ public class WaypointsScreen extends Screen {
             float[] r = actionRects.get(i);
             if (inside(mx, my, r[0], r[1], r[2], r[3])) {
                 actionRuns.get(i).run();
+                if (!multi.isEmpty()) syncBulk();
                 if (focus == null || before == null || !focus.key().equals(before.key())) click(1f);
                 if (slide != null) slideTo(mx);
                 return true;
@@ -1028,10 +1294,33 @@ public class WaypointsScreen extends Screen {
                     else select(f);
                 } else if (l.item() instanceof Waypoint w) {
                     if (eye) w.visible = !w.visible;
-                    else {
+                    else if (shift() && (lastClicked != null || selected instanceof Waypoint)) {
+                        // range from the last clicked waypoint
+                        Waypoint from = lastClicked != null ? lastClicked : (Waypoint) selected;
+                        if (multi.isEmpty() && selected instanceof Waypoint sw) multi.add(sw);
+                        creating = null;
+                        addRange(from, w);
+                        lastClicked = w;
+                    } else if (ctrl() || !multi.isEmpty()) {
+                        // selection mode: a click checks / unchecks
+                        if (multi.isEmpty() && selected instanceof Waypoint sw && sw != w) multi.add(sw);
+                        creating = null;
+                        if (multi.contains(w) && !multi.isEmpty()) pendingToggle = w;
+                        else multi.add(w);
+                        lastClicked = w;
+                        drag = w;
+                        pressWp = w;
+                        pressAt = System.currentTimeMillis();
+                        dragX = mx;
+                        dragY = my;
+                        dragging = false;
+                    } else {
                         if (w != selected) creating = null;
                         select(w);
+                        lastClicked = w;
                         drag = w;
+                        pressWp = w;
+                        pressAt = System.currentTimeMillis();
                         dragX = mx;
                         dragY = my;
                         dragging = false;
@@ -1048,6 +1337,7 @@ public class WaypointsScreen extends Screen {
 
     private void slideTo(double mx) {
         slide.accept(Math.max(0, Math.min(1, Math.round((mx - slideX) / slideW * 20) / 20.0)));
+        if (!multi.isEmpty()) syncBulk();
     }
 
     @Override
@@ -1056,8 +1346,12 @@ public class WaypointsScreen extends Screen {
             slideTo(event.x());
             return true;
         }
+        if (sweeping) return true;
         if (drag != null) {
-            if (!dragging && Math.hypot(event.x() - dragX, event.y() - dragY) > 4 && !Waypoints.FOLDERS.isEmpty()) dragging = true;
+            if (!dragging && Math.hypot(event.x() - dragX, event.y() - dragY) > 4) {
+                pressWp = null; // moved: it is a drag, not a long press
+                if (!Waypoints.FOLDERS.isEmpty()) dragging = true;
+            }
             if (dragging) return true;
         }
         return super.mouseDragged(event, dx, dy);
@@ -1065,6 +1359,22 @@ public class WaypointsScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
+        pressWp = null;
+        if (pendingToggle != null) {
+            Waypoint t = pendingToggle;
+            pendingToggle = null;
+            if (!dragging && !sweeping) {
+                multi.remove(t);
+                if (multi.isEmpty()) select(t);
+                drag = null;
+                return true;
+            }
+        }
+        if (sweeping) {
+            sweeping = false;
+            drag = null;
+            return true;
+        }
         if (slide != null) {
             slide = null;
             changed();
@@ -1076,8 +1386,10 @@ public class WaypointsScreen extends Screen {
                 float ry = listY + l.y() - scroll;
                 if (event.y() < ry || event.y() >= ry + l.h() || !inside(event.x(), event.y(), lx, ry, lw, l.h())) continue;
                 String to = dropFolder(l);
-                if (to != null && !to.equals(drag.folder)) {
-                    drag.folder = to;
+                // dragging one of the selected waypoints moves the whole selection
+                List<Waypoint> moving = multi.contains(drag) ? new ArrayList<>(multi) : List.of(drag);
+                if (to != null && moving.stream().anyMatch(q -> !q.folder.equals(to))) {
+                    for (Waypoint q : moving) q.folder = to;
                     Waypoint.Folder f = Waypoints.folder(to);
                     if (f != null) f.collapsed = false;
                     Waypoints.save();
@@ -1153,7 +1465,18 @@ public class WaypointsScreen extends Screen {
             return true;
         }
         if (k == GLFW.GLFW_KEY_ESCAPE) {
+            if (!multi.isEmpty()) { // first Esc leaves the selection
+                multi.clear();
+                selected = null;
+                return true;
+            }
             onClose();
+            return true;
+        }
+        // Ctrl+A: select every waypoint shown in the list
+        if (k == GLFW.GLFW_KEY_A && (event.modifiers() & GLFW.GLFW_MOD_CONTROL) != 0 && !lines.isEmpty()) {
+            creating = null;
+            multi.addAll(shownWaypoints());
             return true;
         }
         // Ctrl+F: search
