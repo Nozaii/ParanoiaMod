@@ -148,6 +148,8 @@ public final class Settings {
     public static float fsrSharpness = 0.8f; // 0 .. 1
     /** Windows : préférence « GPU hautes performances » pour le Java du jeu (voir JvmTuning). */
     public static boolean dedicatedGpu = false;
+    /** Plein écran fenêtré sans bordure (F11 bascule ce mode au lieu du plein écran exclusif). */
+    public static boolean borderless = false;
 
     // Nametag
     public static boolean nametagEnabled = true;

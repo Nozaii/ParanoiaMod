@@ -79,7 +79,8 @@
     "MiniSkinMixin",
     "MiniHeadMixin",
     "ConsumableMixins$Living",
-    "ConsumableMixins$Local"
+    "ConsumableMixins$Local",
+    "BorderlessMixin"
   ],
   "injectors": {
     "defaultRequire": 1

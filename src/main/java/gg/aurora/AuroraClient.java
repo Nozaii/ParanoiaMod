@@ -114,6 +114,7 @@ public class AuroraClient implements ClientModInitializer {
             long tickT = Prof.start();
             if (!optionsSynced) {
                 Modules.syncVanillaOptions();
+                Borderless.init(mc);
                 optionsSynced = true;
             }
             while (menuKey.consumeClick()) {

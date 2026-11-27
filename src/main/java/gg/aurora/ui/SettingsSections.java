@@ -65,6 +65,8 @@ public final class SettingsSections {
                     gg.aurora.render.Vegetation.refresh(true);
                 }),
                 new Rows.Info("Hidden plants", "Still there: you can walk through and break them"),
+                new Rows.Toggle("Borderless fullscreen", "Covers the whole screen without the title bar. Alt+Tab and the Windows key no longer minimize the game. F11 toggles it",
+                        () -> Settings.borderless, gg.aurora.Borderless::setEnabled),
                 new Rows.Info("Graphics card", Upscaler::gpu),
                 new Rows.Slider("Upscaling", "Version compatible with your GPU", 0, Upscaler.VERSIONS.length - 1, 1,
                         () -> Settings.upscaler, v -> Settings.upscaler = (int) Math.round(v), v -> Upscaler.VERSIONS[(int) Math.round(v)]),
