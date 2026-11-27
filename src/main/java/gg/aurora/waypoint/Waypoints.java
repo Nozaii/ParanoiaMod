@@ -64,7 +64,10 @@ public final class Waypoints {
     public static KeyMapping openKey, addKey, toggleKey, zoneKey;
     /** Sélection de zone en cours : premier coin choisi (null = pas de sélection). */
     public static BlockPos zoneStart;
+    /** Second coin figé : la zone attend une confirmation (null = on vise encore). */
+    public static BlockPos zoneEnd;
     private static boolean zonePicking;
+    private static boolean enterWas, backWas;
     /** Masquage global rapide (touche). */
     public static boolean hidden;
 
@@ -92,30 +95,61 @@ public final class Waypoints {
     public static void startZone() {
         zonePicking = true;
         zoneStart = null;
-        Toasts.push(gg.aurora.ui.Icons.PIN, "Zone", "Aim at the 1st corner and press " + zoneKey.getTranslatedKeyMessage().getString(), false);
+        zoneEnd = null;
+        Toasts.push(gg.aurora.ui.Icons.PIN, "Zone", "Aim at the 1st corner and press " + zoneKeyName(), false);
     }
 
     public static void cancelZone() {
         zonePicking = false;
         zoneStart = null;
+        zoneEnd = null;
     }
 
     public static boolean picking() {
         return zonePicking;
     }
 
+    /** Échap pendant la sélection : annule la zone au lieu d'ouvrir le menu pause (appelé par le mixin setScreen). */
+    public static boolean escapeCancelsZone(Minecraft mc) {
+        if (!zonePicking || !InputConstants.isKeyDown(mc.getWindow(), GLFW.GLFW_KEY_ESCAPE)) return false;
+        cancelZone();
+        Toasts.push(gg.aurora.ui.Icons.PIN, "Zone", "Selection cancelled", false);
+        return true;
+    }
+
+    private static String zoneKeyName() {
+        return zoneKey.getTranslatedKeyMessage().getString();
+    }
+
+    /** Touche zone ou Entrée : pose le coin courant, puis valide la zone en attente de confirmation. */
     private static void zoneKeyPressed(Minecraft mc) {
         if (!zonePicking) {
             startZone();
             zoneStart = target(mc);
-            Toasts.push(gg.aurora.ui.Icons.PIN, "Zone", "1st corner set · aim at the 2nd corner then " + zoneKey.getTranslatedKeyMessage().getString(), false);
+            Toasts.push(gg.aurora.ui.Icons.PIN, "Zone", "1st corner set · aim at the 2nd corner then " + zoneKeyName(), false);
             return;
         }
         if (zoneStart == null) {
             zoneStart = target(mc);
             return;
         }
-        BlockPos b = target(mc);
+        if (zoneEnd == null) {
+            // 2e coin figé : la boîte reste affichée jusqu'à la confirmation
+            zoneEnd = target(mc);
+            return;
+        }
+        confirmZone(mc);
+    }
+
+    /** Retour arrière : en confirmation on revient au choix du 2e coin, sinon au 1er. */
+    private static void zoneUndo() {
+        if (zoneEnd != null) zoneEnd = null;
+        else if (zoneStart != null) zoneStart = null;
+        else cancelZone();
+    }
+
+    private static void confirmZone(Minecraft mc) {
+        BlockPos b = zoneEnd;
         Waypoint w = create(mc);
         w.area = true;
         w.x = zoneStart.getX();
@@ -126,8 +160,7 @@ public final class Waypoints {
         w.z2 = b.getZ();
         w.name = "Zone " + (LIST.size() + 1);
         w.fill = Math.min(w.fill, 0.12f);
-        zonePicking = false;
-        zoneStart = null;
+        cancelZone();
         mc.setScreen(new WaypointsScreen(null, w));
     }
 
@@ -251,9 +284,19 @@ public final class Waypoints {
         while (openKey.consumeClick()) if (mc.screen == null) mc.setScreen(new WaypointsScreen(null, null));
         while (addKey.consumeClick()) if (mc.screen == null && mc.player != null) mc.setScreen(new WaypointsScreen(null, create(mc)));
         while (zoneKey.consumeClick()) if (mc.screen == null && mc.player != null) zoneKeyPressed(mc);
+        // Entrée = même effet que la touche zone, Retour arrière = annule le dernier coin (fronts montants)
+        boolean enter = mc.screen == null && (InputConstants.isKeyDown(mc.getWindow(), GLFW.GLFW_KEY_ENTER)
+                || InputConstants.isKeyDown(mc.getWindow(), GLFW.GLFW_KEY_KP_ENTER));
+        boolean back = mc.screen == null && InputConstants.isKeyDown(mc.getWindow(), GLFW.GLFW_KEY_BACKSPACE);
+        if (zonePicking && mc.player != null) {
+            if (enter && !enterWas) zoneKeyPressed(mc);
+            else if (back && !backWas) zoneUndo();
+        }
+        enterWas = enter;
+        backWas = back;
         if (zonePicking && mc.player != null && mc.player.isShiftKeyDown() && mc.options.keyAttack.isDown()) {
-            zonePicking = false;
-            zoneStart = null;
+            cancelZone();
+            Toasts.push(gg.aurora.ui.Icons.PIN, "Zone", "Selection cancelled", false);
         }
         while (toggleKey.consumeClick()) {
             hidden = !hidden;
@@ -303,13 +346,22 @@ public final class Waypoints {
         double max = Settings.wpMaxDistance > 0 ? Settings.wpMaxDistance : 512;
         Matrix4f mat = pose.last().pose();
         if (zonePicking && mc.player != null) {
-            BlockPos a = zoneStart != null ? zoneStart : target(mc), b = target(mc);
+            BlockPos aim = target(mc);
+            boolean confirming = zoneEnd != null;
+            BlockPos a = zoneStart != null ? zoneStart : aim, b = confirming ? zoneEnd : aim;
             float pulse = 0.5f + 0.5f * (float) Math.sin(System.currentTimeMillis() / 180.0);
             VertexConsumer pv = consumers.getBuffer(wallType);
+            // zone : bleue en cours de visée, verte (plus franche) en attente de confirmation
+            int tint = confirming ? 0x34C759 : 0x4DA3FF;
             box(pv, mat, (float) (Math.min(a.getX(), b.getX()) - cam.x) - 0.01f, (float) (Math.min(a.getY(), b.getY()) - cam.y) - 0.01f,
                     (float) (Math.min(a.getZ(), b.getZ()) - cam.z) - 0.01f, (float) (Math.max(a.getX(), b.getX()) + 1 - cam.x) + 0.01f,
                     (float) (Math.max(a.getY(), b.getY()) + 1 - cam.y) + 0.01f, (float) (Math.max(a.getZ(), b.getZ()) + 1 - cam.z) + 0.01f,
-                    argbA(0x4DA3FF, 0.08f + 0.06f * pulse), argbA(0xFFFFFF, 0.9f));
+                    argbA(tint, (confirming ? 0.12f : 0.08f) + 0.06f * pulse), argbA(confirming ? tint : 0xFFFFFF, 0.9f));
+            // coins posés : cube plein de couleur pour bien voir les deux blocs choisis
+            if (zoneStart != null) cornerBox(pv, mat, cam, zoneStart, 0xFFD43A);
+            if (confirming) cornerBox(pv, mat, cam, zoneEnd, 0xFFD43A);
+            // bloc visé : contour qui épouse sa forme (dalle, escalier…), tant qu'on choisit un coin
+            else blockOutline(pv, mat, cam, mc, aim, argbA(0xFFFFFF, 0.10f + 0.08f * pulse), 0xFFFFFFFF);
         }
         for (int pass = 0; pass < 2; pass++) {
             VertexConsumer vc = null;
@@ -336,6 +388,22 @@ public final class Waypoints {
             }
         }
         if (consumers instanceof MultiBufferSource.BufferSource bs) bs.endBatch();
+    }
+
+    private static void cornerBox(VertexConsumer vc, Matrix4f mat, Vec3 cam, BlockPos p, int rgb) {
+        float x = (float) (p.getX() - cam.x), y = (float) (p.getY() - cam.y), z = (float) (p.getZ() - cam.z);
+        box(vc, mat, x - 0.02f, y - 0.02f, z - 0.02f, x + 1.02f, y + 1.02f, z + 1.02f, argbA(rgb, 0.22f), argbA(rgb, 1f));
+    }
+
+    /** Contour du bloc selon sa forme réelle (cube plein si le bloc n'a pas de forme, ex. air). */
+    private static void blockOutline(VertexConsumer vc, Matrix4f mat, Vec3 cam, Minecraft mc, BlockPos p, int fill, int line) {
+        VoxelShape shape = mc.level.getBlockState(p).getShape(mc.level, p);
+        List<AABB> boxes = shape.isEmpty() ? List.of(new AABB(0, 0, 0, 1, 1, 1)) : shape.toAabbs();
+        for (AABB b : boxes) {
+            box(vc, mat, (float) (p.getX() + b.minX - cam.x) - 0.006f, (float) (p.getY() + b.minY - cam.y) - 0.006f, (float) (p.getZ() + b.minZ - cam.z) - 0.006f,
+                    (float) (p.getX() + b.maxX - cam.x) + 0.006f, (float) (p.getY() + b.maxY - cam.y) + 0.006f, (float) (p.getZ() + b.maxZ - cam.z) + 0.006f,
+                    fill, line);
+        }
     }
 
     private static int argbA(int rgb, float a) {
@@ -453,15 +521,32 @@ public final class Waypoints {
             drawAt(g, mc.font, l.w(), l.sx(), l.sy(), l.dist(), aimed, alpha);
         }
         if (zonePicking) {
-            BlockPos a = zoneStart != null ? zoneStart : target(mc), b = target(mc);
+            BlockPos aim = target(mc);
+            boolean confirming = zoneEnd != null;
+            BlockPos a = zoneStart != null ? zoneStart : aim, b = confirming ? zoneEnd : aim;
             String size = (Math.abs(a.getX() - b.getX()) + 1) + " × " + (Math.abs(a.getY() - b.getY()) + 1) + " × " + (Math.abs(a.getZ() - b.getZ()) + 1);
-            String key = zoneKey.getTranslatedKeyMessage().getString();
-            String msg = zoneStart == null ? "Zone: aim at the 1st corner · " + key : "Zone " + size + " · aim at the 2nd corner · " + key;
+            String key = zoneKeyName();
+            String msg;
+            String hint;
+            if (confirming) {
+                msg = "Create zone " + size + "?";
+                hint = key + " / Enter: confirm · Backspace: redo 2nd corner · Esc: cancel";
+            } else {
+                msg = (zoneStart == null ? "Zone: aim at the 1st corner · " : "Zone " + size + " · aim at the 2nd corner · ") + key;
+                hint = (zoneStart == null ? "" : "Backspace: redo 1st corner · ") + "Esc or sneak + left click: cancel";
+            }
             float tw = Draw.width(msg, 1f);
             float x = gw / 2f - tw / 2, y = gh / 2f + 16;
-            Draw.rrect(g, x - 7, y - 4, tw + 14, 16, 8, 0xD0101014);
+            Draw.rrect(g, x - 7, y - 4, tw + 14, 16, 8, confirming ? 0xE0123A1E : 0xD0101014);
             Draw.text(g, msg, x, y, 1f, 0xFFFFFFFF);
-            Draw.centered(g, "Sneak + left click: cancel", gw / 2f, y + 17, 0.8f, 0xFFA0A4AC);
+            if (!confirming) {
+                // bloc visé : nom + coordonnées, pour savoir exactement quel bloc sera le coin
+                String blk = mc.level.getBlockState(aim).getBlock().getName().getString()
+                        + "  " + aim.getX() + " " + aim.getY() + " " + aim.getZ();
+                Draw.centered(g, blk, gw / 2f, y + 17, 0.8f, 0xFFFFFFFF);
+                y += 11;
+            }
+            Draw.centered(g, hint, gw / 2f, y + 17, 0.8f, 0xFFA0A4AC);
         }
     }
 
