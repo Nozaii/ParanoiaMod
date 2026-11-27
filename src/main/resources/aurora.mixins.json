@@ -25,6 +25,8 @@
     "WaterFogEnvironmentMixin",
     "ScreenEffectRendererMixin",
     "MinecraftScreenMixin",
+    "DisconnectedScreenAccessor",
+    "ConnectScreenMixin",
     "UpscalerMixin",
     "ShieldFixMixins",
     "ShieldPoseMixin",

@@ -1157,6 +1157,15 @@ public final class ModManager {
         }
     }
 
+    /** A loaded jar turned off for the next launch (a server forbids it); shown as pending in the list. */
+    static void disableAtRestart(Path jar, Path off) {
+        synchronized (queued) {
+            if (queued.stream().anyMatch(op -> op.owner().equals(jar))) return;
+        }
+        queue(jar, jar, off);
+        for (Installed i : installed) if (i.path.toAbsolutePath().normalize().equals(jar)) i.pending = "Turns off at restart";
+    }
+
     public static void toast(String icon, String title, String body) {
         Minecraft.getInstance().execute(() -> Toasts.push(icon, title, body, false));
     }
