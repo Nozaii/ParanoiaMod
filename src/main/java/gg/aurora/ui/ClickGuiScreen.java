@@ -559,17 +559,16 @@ public class ClickGuiScreen extends Screen {
             Draw.centered(g, "×", sx + sw - 6.5f, y + 2.8f, 0.95f, Draw.withAlpha(xh ? Theme.TEXT : Theme.TEXT_DIM, a));
         }
 
-        // tiroir : la grille lui laisse la place
+        // réglages du module : page entière qui glisse par-dessus la grille
         drawer.update(frameDt, selected != null ? 1 : 0);
         float d = Draw.clamp01(drawer.value);
         gridY = y + 20;
         gridH = py + ph - FOOTER - 4 - gridY;
-        float gw = cw - (drawerW + 8) * d;
-        drawGrid(g, mx, my, cx, gw, a);
+        drawerW = cw;
+        if (d < 0.99f) drawGrid(g, mx, my, cx, cw, a * (1 - d));
         if (d > 0.01f) {
-            drawerX = cx + cw - drawerW * d + (drawerW + 8) * 0; // glisse depuis le bord droit
-            drawerX = cx + cw - drawerW + drawerW * (1 - d);
-            g.enableScissor((int) (cx + gw + 4), (int) gridY - 2, (int) Math.ceil(cx + cw + 1), (int) Math.ceil(gridY + gridH + 2));
+            drawerX = cx + cw * (1 - d) * 0.25f;
+            g.enableScissor((int) cx - 1, (int) gridY - 2, (int) Math.ceil(cx + cw + 1), (int) Math.ceil(gridY + gridH + 2));
             drawDrawer(g, mx, my, drawerX, gridY - 1, drawerW, gridH + 1, a * Math.min(1, d * 1.5f));
             g.disableScissor();
         }
@@ -929,7 +928,10 @@ public class ClickGuiScreen extends Screen {
                 query = "";
                 searchFocus = false;
                 contentShownAt = System.nanoTime();
-            } else searchFocus = true;
+            } else {
+                searchFocus = true;
+                if (selected != null) select(null, false); // la page cache la grille : chercher la referme
+            }
             return true;
         }
         searchFocus = false;
