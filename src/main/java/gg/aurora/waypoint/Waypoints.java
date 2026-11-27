@@ -68,6 +68,8 @@ public final class Waypoints {
     public static BlockPos zoneEnd;
     private static boolean zonePicking;
     private static boolean enterWas, backWas;
+    /** Zone existante (ou brouillon non créé) dont on refait les coins : gardée intacte si on annule. */
+    private static Waypoint zoneEdit;
     /** Masquage global rapide (touche). */
     public static boolean hidden;
 
@@ -93,6 +95,12 @@ public final class Waypoints {
 
     /** Démarre la sélection d'une zone à la caméra (depuis le menu ou la touche). */
     public static void startZone() {
+        startZone(null);
+    }
+
+    /** Resélection des coins d'une zone : la zone n'est modifiée qu'à la confirmation. */
+    public static void startZone(Waypoint edit) {
+        zoneEdit = edit;
         zonePicking = true;
         zoneStart = null;
         zoneEnd = null;
@@ -100,6 +108,7 @@ public final class Waypoints {
     }
 
     public static void cancelZone() {
+        zoneEdit = null;
         zonePicking = false;
         zoneStart = null;
         zoneEnd = null;
@@ -141,6 +150,16 @@ public final class Waypoints {
         confirmZone(mc);
     }
 
+    private static void setCorners(Waypoint w, BlockPos a, BlockPos b) {
+        w.area = true;
+        w.x = a.getX();
+        w.y = a.getY();
+        w.z = a.getZ();
+        w.x2 = b.getX();
+        w.y2 = b.getY();
+        w.z2 = b.getZ();
+    }
+
     /** Retour arrière : en confirmation on revient au choix du 2e coin, sinon au 1er. */
     private static void zoneUndo() {
         if (zoneEnd != null) zoneEnd = null;
@@ -150,14 +169,19 @@ public final class Waypoints {
 
     private static void confirmZone(Minecraft mc) {
         BlockPos b = zoneEnd;
+        Waypoint edit = zoneEdit;
+        if (edit != null) {
+            setCorners(edit, zoneStart, b);
+            boolean saved = LIST.contains(edit);
+            cancelZone();
+            if (saved) {
+                save();
+                mc.setScreen(WaypointsScreen.editing(edit));
+            } else mc.setScreen(new WaypointsScreen(null, edit));
+            return;
+        }
         Waypoint w = create(mc);
-        w.area = true;
-        w.x = zoneStart.getX();
-        w.y = zoneStart.getY();
-        w.z = zoneStart.getZ();
-        w.x2 = b.getX();
-        w.y2 = b.getY();
-        w.z2 = b.getZ();
+        setCorners(w, zoneStart, b);
         w.name = "Zone " + (LIST.size() + 1);
         w.fill = Math.min(w.fill, 0.12f);
         cancelZone();
