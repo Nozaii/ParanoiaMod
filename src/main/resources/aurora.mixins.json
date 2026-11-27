@@ -22,6 +22,7 @@
     "LevelMixin",
     "ParticleEngineMixin",
     "EntityRenderDispatcherMixin",
+    "FriendGlowStateMixin",
     "WaterFogEnvironmentMixin",
     "ScreenEffectRendererMixin",
     "MinecraftScreenMixin",
