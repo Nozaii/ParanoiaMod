@@ -142,7 +142,8 @@ public class CosmeticsLayer extends RenderLayer<AvatarRenderState, PlayerModel> 
     }
 
     private void submit0(PoseStack pose, SubmitNodeCollector collector, int light, AvatarRenderState state, float yRot, float xRot) {
-        if (state.isInvisible) return;
+        // passe de silhouette du Friend Glow : seuls le joueur et son équipement comptent, pas les cosmétiques
+        if (state.isInvisible || gg.aurora.render.FriendGlow.active) return;
         Cosmetics.Item wings, aura, halo;
         if (state.id == PREVIEW_ID) return;
         Minecraft mc = Minecraft.getInstance();
@@ -198,40 +199,6 @@ public class CosmeticsLayer extends RenderLayer<AvatarRenderState, PlayerModel> 
             int col = (Math.round(185 * flick) << 24) | (hc & 0xFFFFFF);
             collector.submitModel(getParentModel(), state, pose, RenderTypes.entityTranslucentEmissive(state.skin.body().texturePath()),
                     FULL_BRIGHT, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, col, null, 0, null);
-        }
-        // Friend Glow : enveloppe lumineuse légère autour des amis, cachée par les murs (test de profondeur)
-        // au-delà de 32 blocs le contour fait moins d'un pixel : rien à dessiner
-        if (mini == null && d2 < 32 * 32 && gg.aurora.module.ExtraModules.friendGlow(player)) {
-            // silhouette exacte du joueur (même pose, même animation) décalée tout autour de lui face à la
-            // caméra, dessinée juste avant lui : seul le bord dépasse, collé en permanence, caché par les murs
-            int gc = gg.aurora.module.ExtraModules.friendGlowColor();
-            float pulse = 0.8f + 0.2f * Mesh.sin(t * 0.15f);
-            org.joml.Quaternionf camQ = mc.gameRenderer.getMainCamera().rotation();
-            org.joml.Vector3f right = camQ.transform(new org.joml.Vector3f(1, 0, 0)), up = camQ.transform(new org.joml.Vector3f(0, 1, 0));
-            // épaisseur constante à l'écran : proportionnelle à la distance
-            float r = 0.012f * (float) Math.max(2, Math.sqrt(d2));
-            RenderType sil = state.skin != null ? gg.aurora.render.HandGlow.silhouetteOf(state.skin.body().texturePath()) : null;
-            if (sil != null) {
-                var ordered = collector.order(-1);
-                org.joml.Matrix4f tmp = new org.joml.Matrix4f();
-                // 4 silhouettes décalées (haut, bas, gauche, droite) suffisent pour un contour lisible :
-                // avant, jusqu'à 24 copies du modèle par ami et par image (grosse chute de FPS en groupe)
-                int dirs = 4;
-                for (int ring = 1; ring < 2; ring++) {
-                    float rr = r;
-                    int col = (Math.round(90 * pulse) << 24) | (gc & 0xFFFFFF);
-                    for (int i = 0; i < dirs; i++) {
-                        double ang = Math.PI * 2 * (i + ring * 0.5) / dirs;
-                        float ox = Mesh.cos(ang) * rr, oy = Mesh.sin(ang) * rr;
-                        pose.pushPose();
-                        org.joml.Matrix4f m = pose.last().pose();
-                        tmp.translation(right.x * ox + up.x * oy, right.y * ox + up.y * oy, right.z * ox + up.z * oy).mul(m, m);
-                        ordered.submitModel(getParentModel(), state, pose, sil, FULL_BRIGHT,
-                                net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, col, null, 0, null);
-                        pose.popPose();
-                    }
-                }
-            }
         }
         if (self && gg.aurora.module.ExtraModules.BATS.enabled && level == 0) {
             pose.pushPose();

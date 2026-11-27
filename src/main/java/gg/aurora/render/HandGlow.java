@@ -145,7 +145,7 @@ public final class HandGlow {
         instFailed = true;
     }
 
-    private static Identifier textureOf(RenderType source) {
+    static Identifier textureOf(RenderType source) {
         try {
             RenderSetup setup = ((RenderTypeAccessor) source).aurora$state();
             Object binding = ((RenderSetupAccessor) (Object) setup).aurora$textures().get("Sampler0");

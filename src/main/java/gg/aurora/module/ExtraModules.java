@@ -1,6 +1,7 @@
 package gg.aurora.module;
 
 import gg.aurora.Friends;
+import gg.aurora.GlowList;
 import gg.aurora.ui.Icons;
 import gg.aurora.ui.Rows;
 import gg.aurora.ui.Toasts;
@@ -41,8 +42,21 @@ public final class ExtraModules {
 
     public static final Module FRIEND_GLOW = Modules.register(new Module("friend_glow", "Friend Glow", Category.PVP, Icons.FRIENDS, false))
             .withSettings(() -> List.of(
+                    new Rows.Choice("Effect", gg.aurora.render.FriendGlow.STYLES, () -> (int) ExtraModules.FRIEND_GLOW.opt("style", 0),
+                            i -> ExtraModules.FRIEND_GLOW.set("style", i)),
                     new Rows.ColorRow("Outline color", () -> (int) ExtraModules.FRIEND_GLOW.opt("color", 0x8CFFA0),
-                            v -> ExtraModules.FRIEND_GLOW.set("color", v & 0xFFFFFF))));
+                            v -> ExtraModules.FRIEND_GLOW.set("color", v & 0xFFFFFF)),
+                    new Rows.Slider("Thickness", null, 1, 5, 1, () -> ExtraModules.FRIEND_GLOW.opt("width", 2),
+                            v -> ExtraModules.FRIEND_GLOW.set("width", v), v -> String.valueOf(Math.round(v))),
+                    new Rows.Slider("Range", "Hidden by walls at any distance", 16, 128, 8, () -> ExtraModules.FRIEND_GLOW.opt("range", 64),
+                            v -> ExtraModules.FRIEND_GLOW.set("range", v), v -> Math.round(v) + " m"),
+                    new Rows.Toggle("Mounts", "Also outline the horse, boat or minecart they ride", () -> ExtraModules.FRIEND_GLOW.flag("mount", true),
+                            v -> ExtraModules.FRIEND_GLOW.set("mount", v)),
+                    new Rows.Toggle("Aurora friends", "Everyone in your friends list", () -> ExtraModules.FRIEND_GLOW.flag("friends", true),
+                            v -> ExtraModules.FRIEND_GLOW.set("friends", v)),
+                    new Rows.Toggle("Same team", "Players on your scoreboard team", () -> ExtraModules.FRIEND_GLOW.flag("team", false),
+                            v -> ExtraModules.FRIEND_GLOW.set("team", v)),
+                    new Rows.TextField("Players on " + GlowList.server(), "Names, separated by commas", 400, GlowList::text, GlowList::setText)));
 
     public static final Module TARGET_INFO = Modules.register(new Module("target_info", "Target Info", Category.PVP, Icons.TARGET, false))
             .withSettings(() -> List.of(
@@ -245,9 +259,15 @@ public final class ExtraModules {
                 .append(Component.literal(who + " used a totem (" + n + ")").withStyle(ChatFormatting.GRAY)));
     }
 
-    /** Friend Glow : contour vert clair autour des amis. */
+    /** Friend Glow : amis Aurora, coéquipiers (scoreboard) ou joueurs listés pour ce serveur. */
     public static boolean friendGlow(Entity e) {
-        return FRIEND_GLOW.enabled && e instanceof Player p && (p != mc().player && Friends.isFriend(p.getUUID()) || DEV_SELF_FRIEND && p == mc().player);
+        if (!FRIEND_GLOW.enabled || !(e instanceof Player p)) return false;
+        LocalPlayer me = mc().player;
+        if (me == null) return false;
+        if (p == me) return DEV_SELF_FRIEND;
+        if (FRIEND_GLOW.flag("friends", true) && Friends.isFriend(p.getUUID())) return true;
+        if (FRIEND_GLOW.flag("team", false) && me.getTeam() != null && me.getTeam() == p.getTeam()) return true;
+        return GlowList.has(p.getGameProfile().name());
     }
 
     /** Contour vanilla à travers les murs : retiré (fair-play), l'enveloppe reste cachée par les blocs. */
