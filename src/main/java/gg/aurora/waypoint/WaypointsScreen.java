@@ -111,6 +111,13 @@ public class WaypointsScreen extends Screen {
         select(create);
     }
 
+    /** Opens the list with an existing waypoint selected (after reselecting a zone's corners). */
+    public static WaypointsScreen editing(Waypoint w) {
+        WaypointsScreen s = new WaypointsScreen(null, null);
+        s.select(w);
+        return s;
+    }
+
     @Override
     public boolean isPauseScreen() {
         return false;
@@ -576,10 +583,10 @@ public class WaypointsScreen extends Screen {
             float rw = Draw.width("Reselect with the camera", 0.65f);
             rx -= rw;
             link(g, "Reselect with the camera", rx, y - 0.5f, mx, my, a, () -> {
-                if (w != creating) Waypoints.LIST.remove(w);
+                // la zone reste en place : ses coins ne changent qu'une fois la nouvelle sélection confirmée
                 Waypoints.save();
                 minecraft.setScreen(null);
-                Waypoints.startZone();
+                Waypoints.startZone(w);
             });
             rx -= 10;
         }
